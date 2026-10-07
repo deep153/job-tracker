@@ -8,8 +8,3 @@ Platform = Literal["greenhouse"]
 class Company:
     platform: Platform
     board_id: str
-
-
-STARTER_COMPANIES = [
-    Company(platform="greenhouse", board_id="anthropic"),
-]

@@ -1,33 +1,63 @@
+import threading
 from pathlib import Path
 
 import httpx
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
-
-def _greenhouse(request: httpx.Request) -> httpx.Response:
-    # /v1/boards/{board_id}/jobs
-    parts = request.url.path.strip("/").split("/")
-    if len(parts) != 4 or parts[:2] != ["v1", "boards"] or parts[3] != "jobs":
-        return httpx.Response(404)
-    fixture = FIXTURES / "greenhouse" / f"{parts[2]}.json"
-    if not fixture.exists():
-        return httpx.Response(404, json={"status": 404, "error": "Job board not found"})
-    return httpx.Response(200, content=fixture.read_bytes(), headers={"content-type": "application/json"})
-
-
-_HOSTS = {
-    "boards-api.greenhouse.io": _greenhouse,
+_PLATFORM_BY_HOST = {
+    "boards-api.greenhouse.io": "greenhouse",
 }
 
 
-def fake_job_boards() -> httpx.Client:
-    """An HTTP client that serves recorded job-board fixtures instead of the network."""
+def _board_id(platform: str, request: httpx.Request) -> str | None:
+    parts = request.url.path.strip("/").split("/")
+    if platform == "greenhouse" and len(parts) == 4 and parts[:2] == ["v1", "boards"] and parts[3] == "jobs":
+        return parts[2]
+    return None
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        route = _HOSTS.get(request.url.host)
-        if route is None:
+
+class FakeJobBoards:
+    """Serves recorded job-board fixtures instead of the network.
+
+    By default a board is served from `fixtures/<platform>/<board_id>.json`, and boards
+    without a fixture answer 404 like the real APIs do.
+    """
+
+    def __init__(self) -> None:
+        self._fixtures: dict[tuple[str, str], str] = {}
+        self._failures: dict[tuple[str, str], int] = {}
+        self._holds: dict[tuple[str, str], threading.Event] = {}
+
+    def serve(self, platform: str, board_id: str, fixture: str) -> None:
+        """Serve `fixtures/<platform>/<fixture>.json` for this board from now on."""
+        self._fixtures[(platform, board_id)] = fixture
+
+    def fail(self, platform: str, board_id: str, status: int = 500) -> None:
+        self._failures[(platform, board_id)] = status
+
+    def hold(self, platform: str, board_id: str) -> threading.Event:
+        """Block requests for this board until the returned event is set."""
+        event = threading.Event()
+        self._holds[(platform, board_id)] = event
+        return event
+
+    def client(self) -> httpx.Client:
+        return httpx.Client(transport=httpx.MockTransport(self._handle))
+
+    def _handle(self, request: httpx.Request) -> httpx.Response:
+        platform = _PLATFORM_BY_HOST.get(request.url.host)
+        if platform is None:
             return httpx.Response(599, text=f"unexpected host {request.url.host}")
-        return route(request)
-
-    return httpx.Client(transport=httpx.MockTransport(handler))
+        board_id = _board_id(platform, request)
+        if board_id is None:
+            return httpx.Response(404)
+        key = (platform, board_id)
+        if key in self._holds:
+            self._holds[key].wait(timeout=10)
+        if key in self._failures:
+            return httpx.Response(self._failures[key], text="board unavailable")
+        fixture = FIXTURES / platform / f"{self._fixtures.get(key, board_id)}.json"
+        if not fixture.exists():
+            return httpx.Response(404, json={"status": 404, "error": "Job board not found"})
+        return httpx.Response(200, content=fixture.read_bytes(), headers={"content-type": "application/json"})

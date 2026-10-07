@@ -1,0 +1,64 @@
+{
+  "jobs": [
+    {
+      "absolute_url": "https://job-boards.greenhouse.io/acme/jobs/4012345008",
+      "data_compliance": [],
+      "internal_job_id": 4001112008,
+      "location": {
+        "name": "San Francisco, CA"
+      },
+      "metadata": null,
+      "id": 4012345008,
+      "updated_at": "2026-10-04T10:00:00-04:00",
+      "requisition_id": "ENG-101",
+      "title": "Software Engineer, Backend",
+      "company_name": "Acme",
+      "first_published": "2026-09-01T10:00:00-04:00",
+      "language": "en",
+      "content": "&lt;p&gt;Acme is hiring a &lt;strong&gt;backend engineer&lt;/strong&gt; to build our payments platform.&lt;/p&gt;\n&lt;ul&gt;\n&lt;li&gt;5+ years of Python or Go&lt;/li&gt;\n&lt;li&gt;Experience with PostgreSQL &amp;amp; distributed systems&lt;/li&gt;\n&lt;/ul&gt;",
+      "departments": [],
+      "offices": []
+    },
+    {
+      "absolute_url": "https://job-boards.greenhouse.io/acme/jobs/4012345010",
+      "data_compliance": [],
+      "internal_job_id": 4001112010,
+      "location": {
+        "name": "New York, NY"
+      },
+      "metadata": null,
+      "id": 4012345010,
+      "updated_at": "2026-10-05T09:00:00-04:00",
+      "requisition_id": "DATA-201",
+      "title": "Data Engineer",
+      "company_name": "Acme",
+      "first_published": "2026-10-05T09:00:00-04:00",
+      "language": "en",
+      "content": "&lt;p&gt;Own our data pipelines: Spark, Airflow, dbt.&lt;/p&gt;",
+      "departments": [],
+      "offices": []
+    },
+    {
+      "absolute_url": "https://job-boards.greenhouse.io/acme/jobs/4012345011",
+      "data_compliance": [],
+      "internal_job_id": 4001112011,
+      "location": {
+        "name": "Chicago, IL"
+      },
+      "metadata": null,
+      "id": 4012345011,
+      "updated_at": "2026-10-05T12:00:00-04:00",
+      "requisition_id": "ENG-099",
+      "title": "Site Reliability Engineer",
+      "company_name": "Acme",
+      "first_published": "2026-10-05T12:00:00-04:00",
+      "language": "en",
+      "content": "&lt;p&gt;Keep Acme online. On-call rotation, Kubernetes, Terraform.&lt;/p&gt;",
+      "departments": [],
+      "offices": []
+    }
+  ],
+  "meta": {
+    "total": 3
+  }
+}

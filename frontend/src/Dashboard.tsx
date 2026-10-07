@@ -1,45 +1,73 @@
 import { useEffect, useState } from "react";
-import { listJobs, startRun, type Job, type Run } from "./api";
+import { ApiError, getRun, listJobs, listRuns, startRun, type Job, type Run } from "./api";
 import { PLATFORM_LABELS, companyName, fullDate, timeAgo } from "./format";
 
-// newJobs is null when the job list before the run was unknown.
-type RunOutcome = { run: Run; newJobs: number | null };
+const POLL_INTERVAL_MS = 700;
 
 type Failure = { message: string; retry: () => void };
 
 export function Dashboard() {
   const [jobs, setJobs] = useState<Job[] | null>(null);
-  const [running, setRunning] = useState(false);
-  const [lastRun, setLastRun] = useState<RunOutcome | null>(null);
+  const [run, setRun] = useState<Run | null>(null);
+  const [starting, setStarting] = useState(false);
   const [failure, setFailure] = useState<Failure | null>(null);
+  const running = starting || run?.status === "running";
 
   async function loadJobs() {
-    setFailure(null);
     try {
       setJobs(await listJobs());
     } catch (e) {
-      setFailure({ message: (e as Error).message, retry: loadJobs });
+      setFailure({ message: (e as Error).message, retry: loadAll });
     }
   }
 
+  async function loadLatestRun() {
+    try {
+      const [latest] = await listRuns();
+      setRun(latest ?? null);
+    } catch (e) {
+      setFailure({ message: (e as Error).message, retry: loadAll });
+    }
+  }
+
+  async function loadAll() {
+    setFailure(null);
+    await Promise.all([loadJobs(), loadLatestRun()]);
+  }
+
   useEffect(() => {
-    void loadJobs();
+    void loadAll();
   }, []);
 
-  async function startRunAndRefresh() {
-    setRunning(true);
+  useEffect(() => {
+    if (run?.status !== "running") return;
+    const timer = setTimeout(async () => {
+      try {
+        const next = await getRun(run.id);
+        if (next.companies_fetched !== run.companies_fetched || next.status !== "running") {
+          void loadJobs();
+        }
+        setRun(next);
+      } catch (e) {
+        setFailure({ message: (e as Error).message, retry: loadAll });
+      }
+    }, POLL_INTERVAL_MS);
+    return () => clearTimeout(timer);
+  }, [run]);
+
+  async function startRunAndFollow() {
+    setStarting(true);
     setFailure(null);
-    setLastRun(null);
     try {
-      const before = jobs && new Set(jobs.map((job) => job.id));
-      const run = await startRun();
-      const updated = await listJobs();
-      setJobs(updated);
-      setLastRun({ run, newJobs: before && updated.filter((job) => !before.has(job.id)).length });
+      setRun(await startRun());
     } catch (e) {
-      setFailure({ message: `Run failed. ${(e as Error).message}`, retry: startRunAndRefresh });
+      if (e instanceof ApiError && e.status === 409) {
+        await loadLatestRun();
+      } else {
+        setFailure({ message: `Couldn't start the run. ${(e as Error).message}`, retry: startRunAndFollow });
+      }
     } finally {
-      setRunning(false);
+      setStarting(false);
     }
   }
 
@@ -53,7 +81,7 @@ export function Dashboard() {
             </span>
             <span className="brand-name">Job Tracker</span>
           </div>
-          <RunButton running={running} onClick={startRunAndRefresh} />
+          <RunButton running={running} onClick={startRunAndFollow} />
         </div>
       </header>
 
@@ -75,13 +103,13 @@ export function Dashboard() {
         {failure && (
           <ErrorBanner message={failure.message} onRetry={failure.retry} onDismiss={() => setFailure(null)} />
         )}
-        {running && <RunProgress />}
-        {!running && lastRun && <RunSummary outcome={lastRun} />}
+        {run?.status === "running" && <RunProgress run={run} />}
+        {run && run.status !== "running" && <RunSummary run={run} />}
 
         {jobs === null ? (
           !failure && <JobListSkeleton />
         ) : jobs.length === 0 ? (
-          <EmptyState running={running} onRun={startRunAndRefresh} />
+          <EmptyState running={running} onRun={startRunAndFollow} />
         ) : (
           <JobList jobs={jobs} />
         )}
@@ -99,27 +127,89 @@ function RunButton({ running, onClick }: { running: boolean; onClick: () => void
   );
 }
 
-function RunProgress() {
+function plural(count: number, singular: string, pluralForm = `${singular}s`): string {
+  return `${count} ${count === 1 ? singular : pluralForm}`;
+}
+
+function RunProgress({ run }: { run: Run }) {
+  const percent = run.companies_total === 0 ? 0 : (run.companies_fetched / run.companies_total) * 100;
   return (
-    <div className="notice notice-info" role="status">
-      <span className="spinner spinner-dark" aria-hidden="true" />
-      Fetching the latest postings from your company boards…
+    <div className="notice notice-info notice-stacked" role="status">
+      <div className="notice-row">
+        <span className="spinner spinner-dark" aria-hidden="true" />
+        <span className="notice-text">
+          Fetching boards: {run.companies_fetched} of {plural(run.companies_total, "company", "companies")}
+          {run.new_jobs > 0 && ` · ${plural(run.new_jobs, "new job")} so far`}
+        </span>
+      </div>
+      <div
+        className="progress"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={run.companies_total}
+        aria-valuenow={run.companies_fetched}
+      >
+        <div className="progress-bar" style={{ width: `${percent}%` }} />
+      </div>
     </div>
   );
 }
 
-function RunSummary({ outcome }: { outcome: RunOutcome }) {
-  const { run, newJobs } = outcome;
+function RunSummary({ run }: { run: Run }) {
   const finished = run.finished_at ?? run.started_at;
+  const when = (
+    <time dateTime={finished} title={fullDate(finished)}>
+      {timeAgo(finished)}
+    </time>
+  );
+
+  if (run.status === "failed" || run.status === "interrupted") {
+    return (
+      <div className="notice notice-error" role="status">
+        <AlertIcon />
+        <span className="notice-text">
+          {run.status === "failed"
+            ? "The last run stopped unexpectedly"
+            : "The last run was interrupted because the server stopped"}{" "}
+          {when}. Jobs fetched before that were kept; click Run to try again.
+        </span>
+      </div>
+    );
+  }
+
+  const changes = [
+    run.new_jobs === 0 ? "no new jobs" : plural(run.new_jobs, "new job"),
+    run.updated_jobs > 0 && `${run.updated_jobs} updated`,
+    run.closed_jobs > 0 && `${run.closed_jobs} closed`,
+  ].filter(Boolean);
+
   return (
-    <div className="notice notice-success" role="status">
-      <CheckIcon />
-      <span>
-        Run finished <time dateTime={finished} title={fullDate(finished)}>{timeAgo(finished)}</time>
-        {newJobs !== null && " · "}
-        {newJobs === null ? null : newJobs === 0 ? "no new jobs" : `${newJobs} new ${newJobs === 1 ? "job" : "jobs"}`}
-      </span>
-    </div>
+    <>
+      <div className="notice notice-success" role="status">
+        <CheckIcon />
+        <span className="notice-text">
+          Run finished {when} · {plural(run.companies_total, "company", "companies")} checked · {changes.join(" · ")}
+        </span>
+      </div>
+      {run.errors.length > 0 && (
+        <div className="notice notice-warning notice-stacked" role="status">
+          <div className="notice-row">
+            <AlertIcon />
+            <span className="notice-text">
+              {plural(run.errors.length, "board")} couldn't be fetched. The rest of the run completed normally.
+            </span>
+          </div>
+          <ul className="board-errors">
+            {run.errors.map((error) => (
+              <li key={`${error.platform}/${error.board_id}`}>
+                <strong>{companyName(error.board_id)}</strong>{" "}
+                <span className="badge">{PLATFORM_LABELS[error.platform]}</span> {error.message}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </>
   );
 }
 

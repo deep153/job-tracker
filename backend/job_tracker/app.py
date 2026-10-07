@@ -1,45 +1,73 @@
 import json
 import os
 import sqlite3
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
 import httpx
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 
-from job_tracker.companies import STARTER_COMPANIES, Company
+from job_tracker.companies import Company
 from job_tracker.db import Database
-from job_tracker.runs import execute_run
+from job_tracker.runs import RunAlreadyActive, RunService
 from job_tracker.sources import job_board_sources
 
 
 def create_app(
     db_path: Path,
     http: httpx.Client,
-    starter_companies: list[Company] = STARTER_COMPANIES,
+    initial_companies: Sequence[Company] = (),
 ) -> FastAPI:
     db = Database(db_path)
-    db.initialize(starter_companies)
-    sources = job_board_sources(http)
+    db.initialize(initial_companies)
+    runs = RunService(db, job_board_sources(http))
     app = FastAPI(title="Job Tracker")
 
-    @app.post("/api/runs", status_code=201)
+    @app.post("/api/runs", status_code=202)
     def start_run() -> dict[str, Any]:
+        try:
+            run_id = runs.start()
+        except RunAlreadyActive:
+            raise HTTPException(status_code=409, detail="A run is already in progress.") from None
+        return get_run(run_id)
+
+    @app.get("/api/runs")
+    def list_runs() -> list[dict[str, Any]]:
         with db.connect() as conn:
-            run_id = execute_run(conn, sources)
-            return _run_json(conn.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone())
+            rows = conn.execute("SELECT * FROM runs ORDER BY id DESC LIMIT 20").fetchall()
+            return [_run_json(row) for row in rows]
+
+    @app.get("/api/runs/{run_id}")
+    def get_run(run_id: int) -> dict[str, Any]:
+        with db.connect() as conn:
+            row = conn.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Run not found.")
+        return _run_json(row)
 
     @app.get("/api/jobs")
     def list_jobs() -> list[dict[str, Any]]:
         with db.connect() as conn:
-            rows = conn.execute("SELECT * FROM jobs ORDER BY updated_at DESC").fetchall()
+            rows = conn.execute("SELECT * FROM jobs WHERE closed = 0 ORDER BY updated_at DESC").fetchall()
             return [_job_json(row) for row in rows]
 
     return app
 
 
 def _run_json(row: sqlite3.Row) -> dict[str, Any]:
-    return {"id": row["id"], "started_at": row["started_at"], "finished_at": row["finished_at"]}
+    return {
+        "id": row["id"],
+        "status": row["status"],
+        "started_at": row["started_at"],
+        "finished_at": row["finished_at"],
+        "companies_total": row["companies_total"],
+        "companies_fetched": row["companies_fetched"],
+        "new_jobs": row["new_jobs"],
+        "updated_jobs": row["updated_jobs"],
+        "closed_jobs": row["closed_jobs"],
+        "errors": json.loads(row["errors"]),
+    }
 
 
 def _job_json(row: sqlite3.Row) -> dict[str, Any]:

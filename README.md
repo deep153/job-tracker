@@ -1,6 +1,6 @@
 # Job Tracker
 
-A local, single-user dashboard for on-demand job matching. See `.scratch/job-tracker/spec.md`.
+A local, single-user dashboard for on-demand job matching and tailored applications.
 
 ## Running
 
