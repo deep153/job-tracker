@@ -148,16 +148,20 @@ def _seniority_problem(title: str, mine: str | None) -> str | None:
 def _location_problem(posting: Posting, settings: SearchSettings) -> str | None:
     if not posting.locations:
         return None  # nothing to judge by
-    remote = posting.remote is True
+    remote = posting.remote is True or posting.work_mode == "remote"
     if remote and "remote" in settings.work_modes:
         return None
     if not any(_in_place(where, mine) for where in posting.locations for mine in settings.locations):
         if remote:
             return "Remote role, and you haven't chosen remote."
         return f"{' · '.join(posting.locations)} isn't one of your locations."
-    if remote:
+    mode = posting.work_mode
+    if mode is None:
+        hybrid = "hybrid" in _words(" ".join([posting.title, *posting.locations]))
+        mode = "remote" if remote else "hybrid" if hybrid else "onsite"
+    if mode == "remote":
         return None  # remote, or from an office in one of my cities
-    if "hybrid" in _words(" ".join([posting.title, *posting.locations])):
+    if mode == "hybrid":
         return None if "hybrid" in settings.work_modes else "Hybrid role, and you haven't chosen hybrid."
     return None if "onsite" in settings.work_modes else "On-site role, and you haven't chosen on-site."
 

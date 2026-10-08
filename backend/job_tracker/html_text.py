@@ -29,4 +29,6 @@ def html_to_text(html: str) -> str:
     extractor.close()
     text = "".join(extractor.parts)
     lines = (re.sub(r"[ \t]+", " ", line).strip() for line in text.splitlines())
-    return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
+    # A block inside a list item (<li><p>...</p></li>) would otherwise leave its bullet on a line of its own.
+    joined = re.sub(r"^-\n+(?=\S)", "- ", "\n".join(lines), flags=re.M)
+    return re.sub(r"\n{3,}", "\n\n", joined).strip()

@@ -3,6 +3,8 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+from job_tracker.timestamps import utc_timestamp
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
@@ -29,6 +31,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     title TEXT NOT NULL,
     locations TEXT NOT NULL,
     remote INTEGER,
+    work_mode TEXT,
     salary_min INTEGER,
     salary_max INTEGER,
     salary_currency TEXT,
@@ -85,3 +88,15 @@ class Database:
         with self.connect() as conn:
             conn.execute("PRAGMA journal_mode = WAL")
             conn.executescript(_SCHEMA)
+            _migrate(conn)
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Bring a database created by an earlier version up to the current schema."""
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(jobs)")}
+    if "work_mode" not in columns:
+        conn.execute("ALTER TABLE jobs ADD COLUMN work_mode TEXT")
+    stale = conn.execute("SELECT id, updated_at FROM jobs WHERE updated_at NOT LIKE '%+00:00'").fetchall()
+    conn.executemany(
+        "UPDATE jobs SET updated_at = ? WHERE id = ?", [(utc_timestamp(row["updated_at"]), row["id"]) for row in stale]
+    )

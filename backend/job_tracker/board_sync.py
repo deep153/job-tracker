@@ -70,6 +70,7 @@ def _fields(posting: Posting) -> tuple[object, ...]:
         posting.title,
         json.dumps(posting.locations),
         posting.remote,
+        posting.work_mode,
         salary.minimum if salary else None,
         salary.maximum if salary else None,
         salary.currency if salary else None,
@@ -92,6 +93,7 @@ def stored_posting(row: sqlite3.Row) -> Posting:
         title=row["title"],
         locations=json.loads(row["locations"]),
         remote=None if row["remote"] is None else bool(row["remote"]),
+        work_mode=row["work_mode"],
         salary=salary,
         description=row["description"],
         posting_url=row["posting_url"],
@@ -104,10 +106,10 @@ def _insert(conn: sqlite3.Connection, posting: Posting, digest: str, seen_at: st
     job_id = conn.execute(
         """
         INSERT INTO jobs (
-            external_id, title, locations, remote, salary_min, salary_max, salary_currency,
+            external_id, title, locations, remote, work_mode, salary_min, salary_max, salary_currency,
             description, posting_url, application_url, updated_at,
             platform, board_id, content_hash, first_seen_at, last_seen_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (*_fields(posting), posting.platform, posting.board_id, digest, seen_at, seen_at),
     ).lastrowid
@@ -119,7 +121,7 @@ def _update(conn: sqlite3.Connection, job_id: int, posting: Posting, digest: str
     conn.execute(
         """
         UPDATE jobs SET
-            external_id = ?, title = ?, locations = ?, remote = ?, salary_min = ?, salary_max = ?,
+            external_id = ?, title = ?, locations = ?, remote = ?, work_mode = ?, salary_min = ?, salary_max = ?,
             salary_currency = ?, description = ?, posting_url = ?, application_url = ?, updated_at = ?,
             content_hash = ?, last_seen_at = ?, closed = 0
         WHERE id = ?

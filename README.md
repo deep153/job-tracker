@@ -24,7 +24,7 @@ Nothing is fetched until you click **Run**.
 Open **Search settings** on the dashboard and add:
 
 - the roles you want (e.g. "Backend Engineer") and your locations, or choose Remote;
-- your work modes and which job board platforms to search (Greenhouse today);
+- your work modes and which job board platforms to search (Greenhouse, Lever and Ashby);
 - a [Brave Search API key](https://brave.com/search/api/). It's stored only in the local database.
 
 Each run searches the web for company job boards matching every role and location (up to 20 searches per

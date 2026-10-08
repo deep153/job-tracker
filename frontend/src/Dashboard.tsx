@@ -548,7 +548,10 @@ function JobRow({ job }: { job: Job | FilteredJob }) {
       <div className="job-location">
         <PinIcon />
         <span>{location || "Location not listed"}</span>
-        {job.remote && !/remote/i.test(location) && <span className="badge badge-green">Remote</span>}
+        {job.work_mode === "hybrid"
+          ? !/hybrid/i.test(location) && <span className="badge">Hybrid</span>
+          : (job.remote || job.work_mode === "remote") &&
+            !/remote/i.test(location) && <span className="badge badge-green">Remote</span>}
       </div>
       <time className="job-updated" dateTime={job.updated_at} title={`Updated ${fullDate(job.updated_at)}`}>
         Updated {timeAgo(job.updated_at)}

@@ -24,7 +24,8 @@ def test_run_fetches_greenhouse_postings_into_jobs_list(client: TestClient, boar
     assert backend["remote"] is None
     assert backend["posting_url"] == "https://job-boards.greenhouse.io/acme/jobs/4012345008"
     assert backend["application_url"] == "https://job-boards.greenhouse.io/acme/jobs/4012345008"
-    assert backend["updated_at"] == "2026-09-30T14:02:11-04:00"
+    assert backend["work_mode"] is None
+    assert backend["updated_at"] == "2026-09-30T18:02:11+00:00"
     assert "4+ years of Python" in backend["description"]
     assert "PostgreSQL & distributed systems" in backend["description"]
     assert "<" not in backend["description"]

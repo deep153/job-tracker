@@ -239,6 +239,7 @@ def _job_json(row: sqlite3.Row) -> dict[str, Any]:
         "title": row["title"],
         "locations": json.loads(row["locations"]),
         "remote": None if row["remote"] is None else bool(row["remote"]),
+        "work_mode": row["work_mode"],
         "salary": salary,
         "description": row["description"],
         "posting_url": row["posting_url"],

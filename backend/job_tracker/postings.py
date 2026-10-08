@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from job_tracker.companies import Platform
+from job_tracker.search_settings import WorkMode
 
 
 @dataclass(frozen=True)
@@ -20,8 +21,10 @@ class Posting:
     title: str
     locations: list[str]
     remote: bool | None
+    # Only set when the platform states it; otherwise the hard filters judge by the title and locations.
+    work_mode: WorkMode | None
     salary: SalaryRange | None
     description: str
     posting_url: str
     application_url: str
-    updated_at: str
+    updated_at: str  # see `timestamps.utc_timestamp`

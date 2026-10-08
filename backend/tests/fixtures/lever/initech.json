@@ -1,0 +1,89 @@
+[
+  {
+    "additionalPlain": "Initech is an equal opportunity employer.",
+    "additional": "<div>Initech is an equal opportunity employer.</div>",
+    "categories": {
+      "commitment": "Full-time",
+      "department": "Engineering",
+      "location": "New York, New York",
+      "team": "Payments",
+      "allLocations": ["New York, New York"]
+    },
+    "createdAt": 1790856000123,
+    "descriptionPlain": "Initech is hiring a backend engineer for our payments team.",
+    "description": "<div><p>Initech is hiring a <b>backend engineer</b> for our payments team.</p></div>",
+    "id": "5a1c7e52-2c9b-4c8f-9a51-0f3e2b7d1a01",
+    "lists": [
+      {
+        "text": "What you'll do",
+        "content": "<div>\n<li><p>Build services in Go &amp; Python.</p></li>\n<li><p>Own our ledger APIs.</p></li></div>"
+      },
+      {
+        "text": "What you bring",
+        "content": "<li>3+ years of backend experience</li>"
+      }
+    ],
+    "text": "Backend Engineer",
+    "country": "US",
+    "workplaceType": "hybrid",
+    "opening": "",
+    "openingPlain": "",
+    "descriptionBody": "<div><p>Initech is hiring a <b>backend engineer</b> for our payments team.</p></div>",
+    "descriptionBodyPlain": "Initech is hiring a backend engineer for our payments team.",
+    "hostedUrl": "https://jobs.lever.co/initech/5a1c7e52-2c9b-4c8f-9a51-0f3e2b7d1a01",
+    "applyUrl": "https://jobs.lever.co/initech/5a1c7e52-2c9b-4c8f-9a51-0f3e2b7d1a01/apply",
+    "salaryRange": {"min": 160000, "max": 190000, "currency": "USD", "interval": "per-year-salary"},
+    "salaryDescription": "<div>Base pay depends on experience.</div>",
+    "salaryDescriptionPlain": "Base pay depends on experience."
+  },
+  {
+    "additionalPlain": "",
+    "additional": "",
+    "categories": {
+      "commitment": "Full-time",
+      "department": "Engineering",
+      "location": "San Francisco, CA",
+      "team": "Platform",
+      "allLocations": ["San Francisco, CA"]
+    },
+    "createdAt": 1790325000123,
+    "descriptionPlain": "Keep our platform fast and reliable.",
+    "description": "<div><p>Keep our platform fast and reliable.</p></div>",
+    "id": "5a1c7e52-2c9b-4c8f-9a51-0f3e2b7d1a02",
+    "lists": [],
+    "text": "Platform Engineer ",
+    "country": "US",
+    "workplaceType": "remote",
+    "opening": "",
+    "openingPlain": "",
+    "descriptionBody": "<div><p>Keep our platform fast and reliable.</p></div>",
+    "descriptionBodyPlain": "Keep our platform fast and reliable.",
+    "hostedUrl": "https://jobs.lever.co/initech/5a1c7e52-2c9b-4c8f-9a51-0f3e2b7d1a02",
+    "applyUrl": "https://jobs.lever.co/initech/5a1c7e52-2c9b-4c8f-9a51-0f3e2b7d1a02/apply"
+  },
+  {
+    "additionalPlain": "",
+    "additional": "",
+    "categories": {
+      "commitment": "Contract",
+      "department": "Support",
+      "location": "Chicago, IL",
+      "allLocations": ["Chicago, IL"]
+    },
+    "createdAt": 1788998400123,
+    "descriptionPlain": "Help our customers get the most out of Initech.",
+    "description": "<div><p>Help our customers get the most out of Initech.</p></div>",
+    "id": "5a1c7e52-2c9b-4c8f-9a51-0f3e2b7d1a03",
+    "lists": [],
+    "text": "Support Engineer",
+    "country": "US",
+    "workplaceType": "onsite",
+    "opening": "",
+    "openingPlain": "",
+    "descriptionBody": "<div><p>Help our customers get the most out of Initech.</p></div>",
+    "descriptionBodyPlain": "Help our customers get the most out of Initech.",
+    "hostedUrl": "https://jobs.lever.co/initech/5a1c7e52-2c9b-4c8f-9a51-0f3e2b7d1a03",
+    "applyUrl": "https://jobs.lever.co/initech/5a1c7e52-2c9b-4c8f-9a51-0f3e2b7d1a03/apply",
+    "salaryRange": {"min": 40, "max": 55, "currency": "USD", "interval": "per-hour-wage"}
+  }
+]

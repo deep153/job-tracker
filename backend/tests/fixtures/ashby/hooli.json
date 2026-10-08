@@ -1,0 +1,126 @@
+{
+  "apiVersion": "1",
+  "jobs": [
+    {
+      "id": "8d2f5c1e-6b7a-4e3d-9f10-2a4b6c8d0e01",
+      "title": "Senior Software Engineer",
+      "department": "Engineering",
+      "team": "Search",
+      "employmentType": "FullTime",
+      "location": "New York, NY",
+      "shouldDisplayCompensationOnJobPostings": true,
+      "secondaryLocations": [
+        {
+          "location": "San Francisco, CA",
+          "address": {"postalAddress": {"addressRegion": "California", "addressCountry": "USA", "addressLocality": "San Francisco"}}
+        }
+      ],
+      "publishedAt": "2026-10-02T11:00:00.000+00:00",
+      "isListed": true,
+      "isRemote": false,
+      "workplaceType": "Hybrid",
+      "address": {"postalAddress": {"addressRegion": "NY", "addressCountry": "USA", "addressLocality": "New York"}},
+      "jobUrl": "https://jobs.ashbyhq.com/hooli/8d2f5c1e-6b7a-4e3d-9f10-2a4b6c8d0e01",
+      "applyUrl": "https://jobs.ashbyhq.com/hooli/8d2f5c1e-6b7a-4e3d-9f10-2a4b6c8d0e01/application",
+      "descriptionHtml": "<h1><strong>About Hooli</strong></h1><p style=\"min-height:1.5em\">Hooli is making the world a better place.</p><ul><li><p>5+ years building search systems</p></li></ul>",
+      "descriptionPlain": "ABOUT HOOLI\n\nHooli is making the world a better place.\n\n - 5+ years building search systems",
+      "compensation": {
+        "compensationTierSummary": "$120K – $140K • Offers Equity",
+        "scrapeableCompensationSalarySummary": "$120K - $140K",
+        "compensationTiers": [
+          {
+            "id": "1b2c3d4e-0000-4000-8000-000000000001",
+            "tierSummary": "$120K – $140K • Offers Equity",
+            "title": null,
+            "additionalInformation": null,
+            "components": [
+              {"id": "1b2c3d4e-0000-4000-8000-000000000002", "summary": "Offers Equity", "compensationType": "EquityPercentage", "interval": "NONE", "currencyCode": null, "minValue": null, "maxValue": null},
+              {"id": "1b2c3d4e-0000-4000-8000-000000000003", "summary": "$120K – $140K", "compensationType": "Salary", "interval": "1 YEAR", "currencyCode": "USD", "minValue": 120000, "maxValue": 140000}
+            ]
+          }
+        ],
+        "summaryComponents": [
+          {"compensationType": "EquityPercentage", "interval": "NONE", "currencyCode": null, "minValue": null, "maxValue": null},
+          {"compensationType": "Salary", "interval": "1 YEAR", "currencyCode": "USD", "minValue": 120000, "maxValue": 140000}
+        ]
+      }
+    },
+    {
+      "id": "8d2f5c1e-6b7a-4e3d-9f10-2a4b6c8d0e02",
+      "title": "Machine Learning Engineer",
+      "department": "Engineering",
+      "team": "AI",
+      "employmentType": "FullTime",
+      "location": "Remote (US)",
+      "shouldDisplayCompensationOnJobPostings": false,
+      "secondaryLocations": [],
+      "publishedAt": "2026-09-28T16:07:45.753+00:00",
+      "isListed": true,
+      "isRemote": true,
+      "workplaceType": "Remote",
+      "address": {"postalAddress": {"addressCountry": "United States"}},
+      "jobUrl": "https://jobs.ashbyhq.com/hooli/8d2f5c1e-6b7a-4e3d-9f10-2a4b6c8d0e02",
+      "applyUrl": "https://jobs.ashbyhq.com/hooli/8d2f5c1e-6b7a-4e3d-9f10-2a4b6c8d0e02/application",
+      "descriptionHtml": "<p>Train and ship models for Hooli Search.</p>",
+      "descriptionPlain": "Train and ship models for Hooli Search.",
+      "compensation": {
+        "compensationTierSummary": null,
+        "scrapeableCompensationSalarySummary": null,
+        "compensationTiers": [],
+        "summaryComponents": []
+      }
+    },
+    {
+      "id": "8d2f5c1e-6b7a-4e3d-9f10-2a4b6c8d0e03",
+      "title": "Infrastructure Engineer",
+      "department": "Engineering",
+      "team": "Infra",
+      "employmentType": "FullTime",
+      "location": "New York, NY",
+      "shouldDisplayCompensationOnJobPostings": false,
+      "secondaryLocations": [],
+      "publishedAt": "2026-10-03T09:00:00.000+00:00",
+      "isListed": false,
+      "isRemote": false,
+      "workplaceType": "OnSite",
+      "address": {"postalAddress": {"addressRegion": "NY", "addressCountry": "USA", "addressLocality": "New York"}},
+      "jobUrl": "https://jobs.ashbyhq.com/hooli/8d2f5c1e-6b7a-4e3d-9f10-2a4b6c8d0e03",
+      "applyUrl": "https://jobs.ashbyhq.com/hooli/8d2f5c1e-6b7a-4e3d-9f10-2a4b6c8d0e03/application",
+      "descriptionHtml": "<p>An unlisted role, shared by direct link only.</p>",
+      "descriptionPlain": "An unlisted role, shared by direct link only.",
+      "compensation": {
+        "compensationTierSummary": null,
+        "scrapeableCompensationSalarySummary": null,
+        "compensationTiers": [],
+        "summaryComponents": []
+      }
+    },
+    {
+      "id": "8d2f5c1e-6b7a-4e3d-9f10-2a4b6c8d0e04",
+      "title": "Data Engineer",
+      "department": "Engineering",
+      "team": "Data",
+      "employmentType": "FullTime",
+      "location": "Chicago, IL",
+      "shouldDisplayCompensationOnJobPostings": true,
+      "secondaryLocations": [],
+      "publishedAt": "2026-09-20T12:00:00.000+00:00",
+      "isListed": true,
+      "isRemote": false,
+      "workplaceType": "OnSite",
+      "address": {"postalAddress": {"addressRegion": "IL", "addressCountry": "USA", "addressLocality": "Chicago"}},
+      "jobUrl": "https://jobs.ashbyhq.com/hooli/8d2f5c1e-6b7a-4e3d-9f10-2a4b6c8d0e04",
+      "applyUrl": "https://jobs.ashbyhq.com/hooli/8d2f5c1e-6b7a-4e3d-9f10-2a4b6c8d0e04/application",
+      "descriptionHtml": "<p>Build Hooli's data warehouse.</p>",
+      "descriptionPlain": "Build Hooli's data warehouse.",
+      "compensation": {
+        "compensationTierSummary": "Offers Equity",
+        "scrapeableCompensationSalarySummary": null,
+        "compensationTiers": [],
+        "summaryComponents": [
+          {"compensationType": "EquityPercentage", "interval": "NONE", "currencyCode": null, "minValue": null, "maxValue": null}
+        ]
+      }
+    }
+  ]
+}

@@ -6,6 +6,7 @@ import httpx
 from job_tracker.html_text import html_to_text
 from job_tracker.postings import Posting
 from job_tracker.salary_text import salary_from_text
+from job_tracker.timestamps import utc_timestamp
 
 
 class GreenhouseSource:
@@ -34,10 +35,11 @@ def _to_posting(board_id: str, job: dict[str, Any]) -> Posting:
         title=job["title"],
         locations=[location] if location else [],
         remote=True if "remote" in location.lower() else None,
+        work_mode=None,
         # The board API has no pay field; companies state pay ranges in the description.
         salary=salary_from_text(description),
         description=description,
         posting_url=job["absolute_url"],
         application_url=job["absolute_url"],
-        updated_at=job["updated_at"],
+        updated_at=utc_timestamp(job["updated_at"]),
     )

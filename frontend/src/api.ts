@@ -45,6 +45,7 @@ export type Job = {
   title: string;
   locations: string[];
   remote: boolean | null;
+  work_mode: WorkMode | null;
   salary: { min: number | null; max: number | null; currency: string | null } | null;
   description: string;
   posting_url: string;

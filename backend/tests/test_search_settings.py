@@ -43,13 +43,20 @@ def test_remote_only_search_needs_no_location(client: TestClient) -> None:
     assert "Add a location or choose remote." not in client.get("/api/search-settings").json()["missing"]
 
 
-def test_platforms_that_are_not_built_yet_cannot_be_turned_on(client: TestClient) -> None:
-    response = client.put("/api/search-settings", json={**READY_SETTINGS, "platforms": ["greenhouse", "lever"]})
+def test_every_platform_can_be_turned_on(client: TestClient) -> None:
+    available = {p["id"]: p["supported"] for p in client.get("/api/search-settings").json()["available_platforms"]}
+    assert available == {"greenhouse": True, "lever": True, "ashby": True}
+
+    response = client.put("/api/search-settings", json={**READY_SETTINGS, "platforms": ["greenhouse", "lever", "ashby"]})
+
+    assert response.status_code == 200
+    assert response.json()["platforms"] == ["greenhouse", "lever", "ashby"]
+
+
+def test_unknown_platform_is_rejected(client: TestClient) -> None:
+    response = client.put("/api/search-settings", json={**READY_SETTINGS, "platforms": ["workday"]})
 
     assert response.status_code == 422
-    assert response.json()["detail"] == "Lever isn't supported yet."
-    available = {p["id"]: p["supported"] for p in client.get("/api/search-settings").json()["available_platforms"]}
-    assert available == {"greenhouse": True, "lever": False, "ashby": False}
 
 
 def test_search_api_key_is_never_sent_back(client: TestClient) -> None:

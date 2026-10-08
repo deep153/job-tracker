@@ -13,6 +13,8 @@ SEARCH_HOST = "api.search.brave.com"
 
 _PLATFORM_BY_HOST = {
     "boards-api.greenhouse.io": "greenhouse",
+    "api.lever.co": "lever",
+    "api.ashbyhq.com": "ashby",
 }
 
 
@@ -20,11 +22,23 @@ def _board_id(platform: str, request: httpx.Request) -> str | None:
     parts = request.url.path.strip("/").split("/")
     if platform == "greenhouse" and len(parts) == 4 and parts[:2] == ["v1", "boards"] and parts[3] == "jobs":
         return parts[2]
+    if platform == "lever" and len(parts) == 3 and parts[:2] == ["v0", "postings"]:
+        return parts[2] if request.url.params.get("mode") == "json" else None
+    if platform == "ashby" and len(parts) == 3 and parts[:2] == ["posting-api", "job-board"]:
+        return parts[2]
     return None
 
 
 def greenhouse_job_url(board_id: str, job_id: int = 4000000001) -> str:
     return f"https://job-boards.greenhouse.io/{board_id}/jobs/{job_id}"
+
+
+def lever_job_url(board_id: str, job_id: str = "0b6e1c2a-1111-4c3d-8e9f-000000000001") -> str:
+    return f"https://jobs.lever.co/{board_id}/{job_id}"
+
+
+def ashby_job_url(board_id: str, job_id: str = "0b6e1c2a-2222-4c3d-8e9f-000000000001") -> str:
+    return f"https://jobs.ashbyhq.com/{board_id}/{job_id}"
 
 
 _next_job_id = itertools.count(4100000001)
