@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 import sqlite3
 from pathlib import Path
 from typing import Any
@@ -17,9 +18,11 @@ from job_tracker.discovery import BraveSearch, supported_for_discovery
 from job_tracker.filtering import refilter_jobs
 from job_tracker.filters import RULES
 from job_tracker.libreoffice import MISSING_MESSAGE, LibreOffice
+from job_tracker.llm import LLM, SUGGESTED_MODELS, ClaudeLLM
 from job_tracker.resume import MAX_UPLOAD_BYTES, ResumeError, ResumeStore
-from job_tracker.runs import RunAlreadyActive, RunService, SearchSettingsIncomplete
-from job_tracker.search_settings import SearchSettings, Seniority, SettingsStore, WorkMode
+from job_tracker.runs import RunAlreadyActive, RunService, SetupIncomplete
+from job_tracker.scoring import LATEST_SCORES
+from job_tracker.search_settings import DEFAULT_MIN_SCORE, SearchSettings, Seniority, SettingsStore, WorkMode
 from job_tracker.sources import job_board_sources
 
 log = logging.getLogger(__name__)
@@ -28,6 +31,8 @@ DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.docu
 
 MAX_SETTING_ITEMS = 20
 MAX_SETTING_LENGTH = 100
+
+_MODEL_NAME = re.compile(r"^[a-z0-9][a-z0-9.\-]{1,99}$", re.I)
 
 
 class SearchSettingsIn(BaseModel):
@@ -40,6 +45,7 @@ class SearchSettingsIn(BaseModel):
     years_experience: int | None = Field(default=None, ge=0, le=50)
     needs_sponsorship: bool = False
     min_salary: int | None = Field(default=None, ge=0, le=10_000_000)
+    min_score: int = Field(default=DEFAULT_MIN_SCORE, ge=0, le=100)
 
     @field_validator("roles", "locations", "excluded_keywords")
     @classmethod
@@ -63,6 +69,19 @@ class SearchApiKeyIn(BaseModel):
     key: str = Field(max_length=500)
 
 
+class ModelsIn(BaseModel):
+    scoring_model: str
+    tailoring_model: str
+
+    @field_validator("scoring_model", "tailoring_model")
+    @classmethod
+    def _model_name(cls, value: str) -> str:
+        name = value.strip()
+        if not _MODEL_NAME.match(name):
+            raise ValueError("Enter a Claude model name, like claude-haiku-5-5.")
+        return name
+
+
 class CompanyUpdate(BaseModel):
     blocked: bool
 
@@ -76,16 +95,18 @@ class ResumeSkillsIn(BaseModel):
     skills: list[str] = Field(max_length=500)
 
 
-def create_app(db_path: Path, http: httpx.Client, office: LibreOffice | None = None) -> FastAPI:
+def create_app(
+    db_path: Path, http: httpx.Client, office: LibreOffice | None = None, llm: LLM | None = None
+) -> FastAPI:
     db = Database(db_path)
     db.initialize()
     settings = SettingsStore(db)
     sources = job_board_sources(http)
-    runs = RunService(db, settings, BraveSearch(http), sources)
     office = office or LibreOffice.detect()
     if not office.available:
         log.warning(MISSING_MESSAGE)
     resumes = ResumeStore(db, db_path.parent / "files", office)
+    runs = RunService(db, settings, resumes, BraveSearch(http), sources, llm or ClaudeLLM())
     app = FastAPI(title="Job Tracker")
 
     @app.exception_handler(ResumeError)
@@ -134,7 +155,7 @@ def create_app(db_path: Path, http: httpx.Client, office: LibreOffice | None = N
     def search_settings_json() -> dict[str, Any]:
         current = settings.search()
         key = settings.search_api_key()
-        missing = current.missing(has_search_key=key is not None)
+        missing = runs.missing()
         return {
             "roles": current.roles,
             "locations": current.locations,
@@ -145,6 +166,7 @@ def create_app(db_path: Path, http: httpx.Client, office: LibreOffice | None = N
             "years_experience": current.years_experience,
             "needs_sponsorship": current.needs_sponsorship,
             "min_salary": current.min_salary,
+            "min_score": current.min_score,
             "available_platforms": [
                 {"id": p, "name": PLATFORM_NAMES[p], "supported": platform_supported(p)} for p in ALL_PLATFORMS
             ],
@@ -172,13 +194,72 @@ def create_app(db_path: Path, http: httpx.Client, office: LibreOffice | None = N
         settings.set_search_api_key(body.key.strip())
         return Response(status_code=204)
 
+    def ai_settings_json() -> dict[str, Any]:
+        key = settings.anthropic_api_key()
+        return {
+            "anthropic_api_key": {"set": key is not None, "last4": key[-4:] if key else None},
+            "scoring_model": settings.scoring_model(),
+            "tailoring_model": settings.tailoring_model(),
+            "suggested_models": SUGGESTED_MODELS,
+        }
+
+    @app.get("/api/settings")
+    def get_settings() -> dict[str, Any]:
+        return ai_settings_json()
+
+    @app.put("/api/settings/anthropic-api-key")
+    def save_anthropic_api_key(body: SearchApiKeyIn) -> dict[str, Any]:
+        settings.set_anthropic_api_key(body.key.strip())
+        return ai_settings_json()
+
+    @app.put("/api/settings/models")
+    def save_models(body: ModelsIn) -> dict[str, Any]:
+        settings.set_models(body.scoring_model, body.tailoring_model)
+        return ai_settings_json()
+
+    @app.get("/api/settings/costs")
+    def get_costs() -> dict[str, Any]:
+        with db.connect() as conn:
+            by_kind = conn.execute(
+                """
+                SELECT kind, COUNT(*) AS calls, SUM(cost_usd) AS cost_usd, SUM(input_tokens) AS input_tokens,
+                    SUM(output_tokens) AS output_tokens
+                FROM ai_usage GROUP BY kind ORDER BY kind
+                """
+            ).fetchall()
+            recent = conn.execute(
+                "SELECT * FROM runs WHERE scoring_total > 0 OR ai_cost_usd > 0 ORDER BY id DESC LIMIT 10"
+            ).fetchall()
+        return {
+            "total_usd": sum(row["cost_usd"] for row in by_kind),
+            "by_kind": [
+                {
+                    "kind": row["kind"],
+                    "calls": row["calls"],
+                    "cost_usd": row["cost_usd"],
+                    "input_tokens": row["input_tokens"],
+                    "output_tokens": row["output_tokens"],
+                }
+                for row in by_kind
+            ],
+            "recent_runs": [
+                {
+                    "id": row["id"],
+                    "started_at": row["started_at"],
+                    "scored_jobs": row["scored_jobs"],
+                    "ai_cost_usd": row["ai_cost_usd"],
+                }
+                for row in recent
+            ],
+        }
+
     @app.post("/api/runs", status_code=202)
     def start_run() -> dict[str, Any]:
         try:
             run_id = runs.start()
-        except SearchSettingsIncomplete as incomplete:
+        except SetupIncomplete as incomplete:
             first = incomplete.missing[0]
-            detail = f"Finish your search settings first: {first[0].lower()}{first[1:]}"
+            detail = f"Finish setting up first: {first[0].lower()}{first[1:]}"
             raise HTTPException(status_code=400, detail=detail) from None
         except RunAlreadyActive:
             raise HTTPException(status_code=409, detail="A run is already in progress.") from None
@@ -223,18 +304,33 @@ def create_app(db_path: Path, http: httpx.Client, office: LibreOffice | None = N
             raise HTTPException(status_code=404, detail="Company not found.")
         return next(c for c in list_companies() if c["id"] == company_id)
 
-    @app.get("/api/jobs")
-    def list_jobs() -> list[dict[str, Any]]:
+    def passing_jobs(where: str, order: str) -> list[dict[str, Any]]:
+        """Open jobs that passed the filters, with their latest score, if any."""
         with db.connect() as conn:
             rows = conn.execute(
-                """
-                SELECT jobs.* FROM jobs
+                f"""
+                SELECT jobs.*, latest.id AS score_id, latest.score, latest.reasons, latest.matched_keywords,
+                    latest.missing_keywords, latest.model, latest.resume_version, latest.scored_at
+                FROM jobs
                 JOIN companies ON companies.platform = jobs.platform AND companies.board_id = jobs.board_id
-                WHERE jobs.closed = 0 AND companies.blocked = 0 AND jobs.rejected_rule IS NULL
-                ORDER BY jobs.updated_at DESC
-                """
+                LEFT JOIN ({LATEST_SCORES}) AS latest ON latest.job_id = jobs.id
+                WHERE jobs.closed = 0 AND companies.blocked = 0 AND jobs.rejected_rule IS NULL AND ({where})
+                ORDER BY {order}
+                """,
+                (settings.search().min_score,),
             ).fetchall()
-            return [_job_json(row) for row in rows]
+        return [_job_json(row) for row in rows]
+
+    @app.get("/api/jobs")
+    def list_jobs() -> list[dict[str, Any]]:
+        return passing_jobs("latest.score >= ?", "latest.score DESC, jobs.updated_at DESC")
+
+    @app.get("/api/jobs/below-threshold")
+    def list_jobs_below_threshold() -> list[dict[str, Any]]:
+        """Scored below my threshold, or not scored yet (those come first)."""
+        return passing_jobs(
+            "latest.score IS NULL OR latest.score < ?", "latest.score IS NOT NULL, latest.score DESC, jobs.updated_at DESC"
+        )
 
     @app.get("/api/jobs/filtered-out")
     def list_filtered_out_jobs() -> list[dict[str, Any]]:
@@ -272,6 +368,10 @@ def _run_json(row: sqlite3.Row) -> dict[str, Any]:
         "closed_jobs": row["closed_jobs"],
         "filtered_out": {rule: 0 for rule in RULES} | json.loads(row["filtered_out"]),
         "errors": json.loads(row["errors"]),
+        "scoring_total": row["scoring_total"],
+        "scored_jobs": row["scored_jobs"],
+        "matched_jobs": row["matched_jobs"],
+        "ai_cost_usd": row["ai_cost_usd"],
     }
 
 
@@ -307,6 +407,21 @@ def _job_json(row: sqlite3.Row) -> dict[str, Any]:
         "posting_url": row["posting_url"],
         "application_url": row["application_url"],
         "updated_at": row["updated_at"],
+        "score": _score_json(row),
+    }
+
+
+def _score_json(row: sqlite3.Row) -> dict[str, Any] | None:
+    if "score_id" not in row.keys() or row["score_id"] is None:
+        return None
+    return {
+        "score": row["score"],
+        "reasons": json.loads(row["reasons"]),
+        "matched_keywords": json.loads(row["matched_keywords"]),
+        "missing_keywords": json.loads(row["missing_keywords"]),
+        "model": row["model"],
+        "resume_version": row["resume_version"],
+        "scored_at": row["scored_at"],
     }
 
 

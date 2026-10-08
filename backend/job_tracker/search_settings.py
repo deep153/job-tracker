@@ -5,6 +5,9 @@ from typing import Literal
 
 from job_tracker.companies import Platform
 from job_tracker.db import Database
+from job_tracker.llm import DEFAULT_SCORING_MODEL, DEFAULT_TAILORING_MODEL
+
+DEFAULT_MIN_SCORE = 70
 
 WorkMode = Literal["remote", "hybrid", "onsite"]
 Seniority = Literal["intern", "junior", "mid", "senior", "staff", "principal"]
@@ -23,6 +26,7 @@ class SearchSettings:
     years_experience: int | None = None
     needs_sponsorship: bool = False
     min_salary: int | None = None
+    min_score: int = DEFAULT_MIN_SCORE
 
     def missing(self, has_search_key: bool) -> list[str]:
         """Human-readable list of what still has to be set before a run can start."""
@@ -62,6 +66,22 @@ class SettingsStore:
 
     def set_search_api_key(self, key: str) -> None:
         self._set("search_api_key", key)
+
+    def anthropic_api_key(self) -> str | None:
+        return self._get("anthropic_api_key") or None
+
+    def set_anthropic_api_key(self, key: str) -> None:
+        self._set("anthropic_api_key", key)
+
+    def scoring_model(self) -> str:
+        return self._get("scoring_model") or DEFAULT_SCORING_MODEL
+
+    def tailoring_model(self) -> str:
+        return self._get("tailoring_model") or DEFAULT_TAILORING_MODEL
+
+    def set_models(self, scoring: str, tailoring: str) -> None:
+        self._set("scoring_model", scoring)
+        self._set("tailoring_model", tailoring)
 
     def _get(self, key: str) -> str | None:
         with self._db.connect() as conn:

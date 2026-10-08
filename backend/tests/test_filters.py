@@ -21,7 +21,9 @@ def run_with(client: TestClient, boards: FakeJobBoards, jobs: list[dict[str, Any
 
 
 def shown(client: TestClient) -> list[str]:
-    return sorted(j["title"] for j in client.get("/api/jobs").json())
+    """Titles of the jobs that passed the filters, whether they're scored as matches yet or not."""
+    passed = client.get("/api/jobs").json() + client.get("/api/jobs/below-threshold").json()
+    return sorted(j["title"] for j in passed)
 
 
 def rejections(client: TestClient) -> dict[str, tuple[str, str]]:

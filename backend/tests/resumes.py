@@ -1,8 +1,11 @@
 import io
+from typing import Any
 
 import docx
+import httpx2
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_BREAK
 from docx.shared import Pt
+from fastapi.testclient import TestClient
 
 DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
@@ -39,3 +42,27 @@ def sample_resume(summary: str = SUMMARY, pages: int = 1) -> bytes:
     buffer = io.BytesIO()
     document.save(buffer)
     return buffer.getvalue()
+
+
+def upload(client: TestClient, data: bytes, filename: str = "Jordan Rivera.docx") -> httpx2.Response:
+    response: httpx2.Response = client.post("/api/resume", files={"file": (filename, data, DOCX_TYPE)})
+    return response
+
+
+def index_of(resume: dict[str, Any], text: str) -> int:
+    return next(int(p["index"]) for p in resume["paragraphs"] if p["text"] == text)
+
+
+def mapping_for(resume: dict[str, Any], summary: str = SUMMARY) -> dict[str, list[int]]:
+    """The sample resume's Summary paragraph and its two skill lines."""
+    return {"summary": [index_of(resume, summary)], "skills": [index_of(resume, line) for line in SKILL_LINES]}
+
+
+def add_ready_resume(client: TestClient, summary: str = SUMMARY) -> dict[str, Any]:
+    """Upload the sample resume and mark its Summary and Skills, so it can be scored against."""
+    uploaded = upload(client, sample_resume(summary))
+    assert uploaded.status_code == 201, uploaded.text
+    mapped = client.put("/api/resume/mapping", json=mapping_for(uploaded.json(), summary))
+    assert mapped.status_code == 200, mapped.text
+    resume: dict[str, Any] = mapped.json()
+    return resume

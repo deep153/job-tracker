@@ -11,11 +11,13 @@ def test_run_is_refused_until_search_settings_are_complete(client: TestClient) -
         "Add a location or choose remote.",
         "Turn on at least one job board platform.",
         "Add your search API key.",
+        "Add your Anthropic API key in Settings.",
+        "Upload your resume and mark its Summary and Skills.",
     ]
 
     refused = client.post("/api/runs")
     assert refused.status_code == 400
-    assert refused.json()["detail"] == "Finish your search settings first: add at least one role."
+    assert refused.json()["detail"] == "Finish setting up first: add at least one role."
 
     configure_search(client)
     assert client.get("/api/search-settings").json()["ready"] is True

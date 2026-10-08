@@ -13,6 +13,8 @@ dependencies = [
     "python-docx",
     "python-multipart",
     "pypdf",
+    "anthropic>=1.12",
+    "httpx2",
 ]
 
 [project.optional-dependencies]

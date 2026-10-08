@@ -171,6 +171,15 @@ def _split_top_level(text: str) -> list[str]:
     return items
 
 
+@dataclass(frozen=True)
+class MasterResume:
+    """The current resume version as the AI sees it."""
+
+    version: int
+    text: str
+    skills: list[str]
+
+
 class ResumeStore:
     """Versions of the master resume: each upload is a new version, and earlier versions are kept."""
 
@@ -220,6 +229,14 @@ class ResumeStore:
 
     def get(self, version: int) -> dict[str, Any]:
         return _resume_json(self._row(version))
+
+    def master(self) -> MasterResume | None:
+        """The current version, or None until it's uploaded and its Summary and Skills are marked."""
+        resume = self.current()
+        if resume is None or not resume["ready"]:
+            return None
+        text = "\n".join(p["text"] for p in resume["paragraphs"] if p["text"])
+        return MasterResume(resume["version"], text, resume["skills"])
 
     def versions(self) -> list[dict[str, Any]]:
         with self._db.connect() as conn:

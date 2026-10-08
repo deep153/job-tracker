@@ -5,6 +5,7 @@ import threading
 from collections import Counter
 from collections.abc import Mapping
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
@@ -15,13 +16,17 @@ from job_tracker.companies import Platform
 from job_tracker.db import Database
 from job_tracker.discovery import WebSearch, discover
 from job_tracker.filtering import refilter_jobs
+from job_tracker.llm import LLM, LLMError
 from job_tracker.postings import Posting
+from job_tracker.resume import MasterResume, ResumeStore
+from job_tracker.scoring import FitScore, record_usage, save_score, score_job
 from job_tracker.search_settings import SearchSettings, SettingsStore
 from job_tracker.sources import JobBoardSource
 
 log = logging.getLogger(__name__)
 
 MAX_PARALLEL_FETCHES = 8
+MAX_PARALLEL_SCORES = 4
 
 
 def _now() -> str:
@@ -45,26 +50,42 @@ class RunAlreadyActive(Exception):
     pass
 
 
-class SearchSettingsIncomplete(Exception):
+class SetupIncomplete(Exception):
     def __init__(self, missing: list[str]) -> None:
         super().__init__(missing)
         self.missing = missing
 
 
+@dataclass(frozen=True)
+class RunInputs:
+    """Everything a run uses, as it was when the run started."""
+
+    search_settings: SearchSettings
+    search_api_key: str
+    anthropic_api_key: str
+    scoring_model: str
+    resume: MasterResume
+
+
 class RunService:
-    """Executes job runs in the background, one at a time: discover companies, then fetch and filter their jobs."""
+    """Executes job runs in the background, one at a time: discover companies, fetch and filter their jobs,
+    then score the jobs that passed the filters."""
 
     def __init__(
         self,
         db: Database,
         settings: SettingsStore,
+        resumes: ResumeStore,
         search: WebSearch,
         sources: Mapping[Platform, JobBoardSource],
+        llm: LLM,
     ) -> None:
         self._db = db
         self._settings = settings
+        self._resumes = resumes
         self._search = search
         self._sources = sources
+        self._llm = llm
         self._start_lock = threading.Lock()
         with self._db.connect() as conn:
             # A run still marked running belongs to a backend process that has since stopped.
@@ -72,12 +93,19 @@ class RunService:
                 "UPDATE runs SET status = 'interrupted', finished_at = ? WHERE status = 'running'", (_now(),)
             )
 
+    def missing(self) -> list[str]:
+        """Human-readable list of what still has to be set up before a run can start."""
+        missing = self._settings.search().missing(has_search_key=self._settings.search_api_key() is not None)
+        if self._settings.anthropic_api_key() is None:
+            missing.append("Add your Anthropic API key in Settings.")
+        if self._resumes.current() is None:
+            missing.append("Upload your resume and mark its Summary and Skills.")
+        elif self._resumes.master() is None:
+            missing.append("Mark your resume's Summary and Skills.")
+        return missing
+
     def start(self) -> int:
-        search_settings = self._settings.search()
-        api_key = self._settings.search_api_key()
-        missing = search_settings.missing(has_search_key=api_key is not None)
-        if missing or api_key is None:
-            raise SearchSettingsIncomplete(missing)
+        inputs = self._inputs()
         with self._start_lock, self._db.connect() as conn:
             if conn.execute("SELECT 1 FROM runs WHERE status = 'running'").fetchone():
                 raise RunAlreadyActive
@@ -85,14 +113,26 @@ class RunService:
                 "INSERT INTO runs (status, stage, started_at) VALUES ('running', 'discovering', ?)", (_now(),)
             ).lastrowid
         assert run_id is not None
-        threading.Thread(target=self._execute, args=(run_id, search_settings, api_key), daemon=True).start()
+        threading.Thread(target=self._execute, args=(run_id, inputs), daemon=True).start()
         return run_id
 
-    def _execute(self, run_id: int, search_settings: SearchSettings, api_key: str) -> None:
+    def _inputs(self) -> RunInputs:
+        missing = self.missing()
+        search_api_key = self._settings.search_api_key()
+        anthropic_api_key = self._settings.anthropic_api_key()
+        resume = self._resumes.master()
+        if missing or search_api_key is None or anthropic_api_key is None or resume is None:
+            raise SetupIncomplete(missing)
+        return RunInputs(
+            self._settings.search(), search_api_key, anthropic_api_key, self._settings.scoring_model(), resume
+        )
+
+    def _execute(self, run_id: int, inputs: RunInputs) -> None:
         status = "finished"
         try:
-            self._discover(run_id, search_settings, api_key)
-            self._fetch_all(run_id, self._companies_to_fetch(search_settings))
+            self._discover(run_id, inputs.search_settings, inputs.search_api_key)
+            self._fetch_all(run_id, self._companies_to_fetch(inputs.search_settings))
+            self._score_all(run_id, inputs)
         except Exception:
             log.exception("run %s failed", run_id)
             status = "failed"
@@ -177,6 +217,82 @@ class RunService:
                 (result.new, result.updated, result.closed, run_id),
             )
 
+    def _score_all(self, run_id: int, inputs: RunInputs) -> None:
+        """Score every open job that passed the filters and has no score for this resume version and content."""
+        with self._db.connect() as conn:
+            jobs = conn.execute(
+                """
+                SELECT jobs.* FROM jobs
+                JOIN companies ON companies.platform = jobs.platform AND companies.board_id = jobs.board_id
+                WHERE jobs.closed = 0 AND companies.blocked = 0 AND jobs.rejected_rule IS NULL
+                    AND NOT EXISTS (
+                        SELECT 1 FROM scores WHERE scores.job_id = jobs.id AND scores.resume_version = ?
+                            AND scores.content_hash = jobs.content_hash
+                    )
+                ORDER BY jobs.id
+                """,
+                (inputs.resume.version,),
+            ).fetchall()
+            conn.execute("UPDATE runs SET stage = 'scoring', scoring_total = ? WHERE id = ?", (len(jobs), run_id))
+        failed: list[str] = []
+        stopped = False
+        with ThreadPoolExecutor(max_workers=MAX_PARALLEL_SCORES) as pool:
+            futures: dict[Future[FitScore], sqlite3.Row] = {
+                pool.submit(
+                    score_job,
+                    self._llm,
+                    inputs.anthropic_api_key,
+                    inputs.scoring_model,
+                    inputs.resume,
+                    inputs.search_settings,
+                    job,
+                ): job
+                for job in jobs
+            }
+            for future in as_completed(futures):
+                if future.cancelled():
+                    continue
+                job = futures[future]
+                try:
+                    fit = future.result()
+                except LLMError as error:
+                    if error.fatal and not stopped:
+                        # Every later call would fail the same way; keep the answers already on their way.
+                        stopped = True
+                        for pending in futures:
+                            pending.cancel()
+                        with self._db.connect() as conn:
+                            _append_error(conn, run_id, _scoring_error(f"Scoring stopped: {error.message}"))
+                    elif not error.fatal:
+                        failed.append(error.message)
+                    continue
+                except Exception as error:
+                    log.exception("scoring job %s failed", job["id"])
+                    failed.append(f"Unexpected error: {error}")
+                    continue
+                self._record_score(run_id, job, inputs, fit)
+        if failed:
+            noun = "job" if len(failed) == 1 else "jobs"
+            message = f"Couldn't score {len(failed)} {noun}; they'll be tried again next run. {failed[0]}"
+            with self._db.connect() as conn:
+                _append_error(conn, run_id, _scoring_error(message))
+
+    def _record_score(self, run_id: int, job: sqlite3.Row, inputs: RunInputs, fit: FitScore) -> None:
+        scored_at = _now()
+        with self._db.connect() as conn:
+            save_score(conn, job["id"], job["content_hash"], inputs.resume.version, fit, scored_at)
+            cost = record_usage(
+                conn, "scoring", run_id, job["id"], fit.model, fit.input_tokens, fit.output_tokens, scored_at
+            )
+            conn.execute(
+                """
+                UPDATE runs SET scored_jobs = scored_jobs + 1, matched_jobs = matched_jobs + ?,
+                    ai_cost_usd = ai_cost_usd + ?
+                WHERE id = ?
+                """,
+                (fit.score >= inputs.search_settings.min_score, cost, run_id),
+            )
+
     def _record_failure(self, run_id: int, platform: Platform, board_id: str, message: str) -> None:
         with self._db.connect() as conn:
             conn.execute(
@@ -185,6 +301,10 @@ class RunService:
             )
             conn.execute("UPDATE runs SET companies_fetched = companies_fetched + 1 WHERE id = ?", (run_id,))
             _append_error(conn, run_id, {"kind": "board", "platform": platform, "board_id": board_id, "message": message})
+
+
+def _scoring_error(message: str) -> dict[str, Any]:
+    return {"kind": "scoring", "platform": None, "board_id": None, "message": message}
 
 
 def _append_error(conn: sqlite3.Connection, run_id: int, error: dict[str, Any]) -> None:

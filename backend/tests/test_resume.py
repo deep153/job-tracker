@@ -1,7 +1,6 @@
 import io
 import zipfile
 from pathlib import Path
-from typing import Any
 
 import httpx
 from fastapi.testclient import TestClient
@@ -9,21 +8,7 @@ from pypdf import PdfReader
 
 from job_tracker.app import create_app
 from job_tracker.libreoffice import LibreOffice
-from tests.resumes import DOCX_TYPE, SKILL_LINES, SUMMARY, sample_resume
-
-
-def upload(client: TestClient, data: bytes, filename: str = "Jordan Rivera.docx") -> httpx.Response:
-    response: httpx.Response = client.post("/api/resume", files={"file": (filename, data, DOCX_TYPE)})
-    return response
-
-
-def index_of(resume: dict[str, Any], text: str) -> int:
-    return next(int(p["index"]) for p in resume["paragraphs"] if p["text"] == text)
-
-
-def mapping_for(resume: dict[str, Any]) -> dict[str, list[int]]:
-    """The sample resume's Summary paragraph and its two skill lines."""
-    return {"summary": [index_of(resume, SUMMARY)], "skills": [index_of(resume, line) for line in SKILL_LINES]}
+from tests.resumes import SKILL_LINES, SUMMARY, index_of, mapping_for, sample_resume, upload
 
 
 def pdf_text(pdf: bytes) -> str:

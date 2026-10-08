@@ -65,7 +65,37 @@ CREATE TABLE IF NOT EXISTS runs (
     updated_jobs INTEGER NOT NULL DEFAULT 0,
     closed_jobs INTEGER NOT NULL DEFAULT 0,
     filtered_out TEXT NOT NULL DEFAULT '{}',
-    errors TEXT NOT NULL DEFAULT '[]'
+    errors TEXT NOT NULL DEFAULT '[]',
+    scoring_total INTEGER NOT NULL DEFAULT 0,
+    scored_jobs INTEGER NOT NULL DEFAULT 0,
+    matched_jobs INTEGER NOT NULL DEFAULT 0,
+    ai_cost_usd REAL NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS scores (
+    id INTEGER PRIMARY KEY,
+    job_id INTEGER NOT NULL REFERENCES jobs (id),
+    resume_version INTEGER NOT NULL REFERENCES resume_master (id),
+    content_hash TEXT NOT NULL,
+    score INTEGER NOT NULL,
+    reasons TEXT NOT NULL,
+    matched_keywords TEXT NOT NULL,
+    missing_keywords TEXT NOT NULL,
+    model TEXT NOT NULL,
+    scored_at TEXT NOT NULL,
+    UNIQUE (job_id, resume_version)
+);
+
+CREATE TABLE IF NOT EXISTS ai_usage (
+    id INTEGER PRIMARY KEY,
+    kind TEXT NOT NULL,
+    run_id INTEGER REFERENCES runs (id),
+    job_id INTEGER REFERENCES jobs (id),
+    model TEXT NOT NULL,
+    input_tokens INTEGER NOT NULL,
+    output_tokens INTEGER NOT NULL,
+    cost_usd REAL NOT NULL,
+    created_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS resume_master (
@@ -103,11 +133,25 @@ class Database:
             _migrate(conn)
 
 
+# Columns added since a table was first created, which older databases lack.
+_ADDED_COLUMNS = {
+    "jobs": {"work_mode": "TEXT"},
+    "runs": {
+        "scoring_total": "INTEGER NOT NULL DEFAULT 0",
+        "scored_jobs": "INTEGER NOT NULL DEFAULT 0",
+        "matched_jobs": "INTEGER NOT NULL DEFAULT 0",
+        "ai_cost_usd": "REAL NOT NULL DEFAULT 0",
+    },
+}
+
+
 def _migrate(conn: sqlite3.Connection) -> None:
     """Bring a database created by an earlier version up to the current schema."""
-    columns = {row["name"] for row in conn.execute("PRAGMA table_info(jobs)")}
-    if "work_mode" not in columns:
-        conn.execute("ALTER TABLE jobs ADD COLUMN work_mode TEXT")
+    for table, added in _ADDED_COLUMNS.items():
+        columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+        for name, declaration in added.items():
+            if name not in columns:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {declaration}")
     stale = conn.execute("SELECT id, updated_at FROM jobs WHERE updated_at NOT LIKE '%+00:00'").fetchall()
     conn.executemany(
         "UPDATE jobs SET updated_at = ? WHERE id = ?", [(utc_timestamp(row["updated_at"]), row["id"]) for row in stale]

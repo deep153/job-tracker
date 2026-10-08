@@ -21,7 +21,9 @@ def discover_all(client: TestClient, boards: FakeJobBoards, **settings: Any) -> 
 
 
 def jobs_by_title(client: TestClient) -> dict[str, dict[str, Any]]:
-    return {job["title"]: job for job in client.get("/api/jobs").json()}
+    """The jobs that passed the filters, whether they're scored as matches yet or not."""
+    passed = client.get("/api/jobs").json() + client.get("/api/jobs/below-threshold").json()
+    return {job["title"]: job for job in passed}
 
 
 def rejections(client: TestClient) -> dict[str, tuple[str, str]]:
@@ -261,18 +263,32 @@ def test_database_from_an_earlier_version_is_upgraded(tmp_path: Path) -> None:
                 first_seen_at TEXT NOT NULL, last_seen_at TEXT NOT NULL, closed INTEGER NOT NULL DEFAULT 0,
                 rejected_rule TEXT, rejected_reason TEXT, UNIQUE (platform, external_id)
             );
+            CREATE TABLE runs (
+                id INTEGER PRIMARY KEY, status TEXT NOT NULL, stage TEXT NOT NULL DEFAULT 'discovering',
+                started_at TEXT NOT NULL, finished_at TEXT, search_queries INTEGER NOT NULL DEFAULT 0,
+                search_queries_capped INTEGER NOT NULL DEFAULT 0, companies_discovered INTEGER NOT NULL DEFAULT 0,
+                companies_total INTEGER NOT NULL DEFAULT 0, companies_fetched INTEGER NOT NULL DEFAULT 0,
+                new_jobs INTEGER NOT NULL DEFAULT 0, updated_jobs INTEGER NOT NULL DEFAULT 0,
+                closed_jobs INTEGER NOT NULL DEFAULT 0, filtered_out TEXT NOT NULL DEFAULT '{}',
+                errors TEXT NOT NULL DEFAULT '[]'
+            );
             INSERT INTO companies (platform, board_id, discovered_at, discovered_query)
             VALUES ('greenhouse', 'acme', '2026-10-01T00:00:00+00:00', 'q');
             INSERT INTO jobs (platform, board_id, external_id, title, locations, description, posting_url,
                 application_url, updated_at, content_hash, first_seen_at, last_seen_at)
             VALUES ('greenhouse', 'acme', '1', 'Backend Engineer', '[]', '', 'u', 'u', '2026-09-30T14:02:11-04:00',
                 'h', '2026-10-01T00:00:00+00:00', '2026-10-01T00:00:00+00:00');
+            INSERT INTO runs (status, started_at, finished_at)
+            VALUES ('finished', '2026-10-01T00:00:00+00:00', '2026-10-01T00:01:00+00:00');
             """
         )
 
     app = create_app(db_path=db_path, http=httpx.Client(transport=httpx.MockTransport(lambda _: httpx.Response(599))))
     with TestClient(app) as client:
-        [job] = client.get("/api/jobs").json()
+        [job] = client.get("/api/jobs/below-threshold").json()
+        [run] = client.get("/api/runs").json()
 
     assert job["updated_at"] == "2026-09-30T18:02:11+00:00"
     assert job["work_mode"] is None
+    assert job["score"] is None
+    assert (run["scored_jobs"], run["matched_jobs"], run["ai_cost_usd"]) == (0, 0, 0)

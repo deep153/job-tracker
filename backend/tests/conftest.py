@@ -7,9 +7,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from job_tracker.app import create_app
-from tests.fakes import FakeJobBoards, greenhouse_job_url
+from tests.fakes import FakeJobBoards, FakeLLM, greenhouse_job_url
+from tests.resumes import add_ready_resume
 
 SEARCH_KEY = "brave-test-key-1234"
+ANTHROPIC_KEY = "sk-ant-test-key-5678"
 
 READY_SETTINGS: dict[str, Any] = {
     "roles": ["Backend Engineer"],
@@ -32,17 +34,27 @@ def boards() -> FakeJobBoards:
 
 
 @pytest.fixture
-def client(tmp_path: Path, boards: FakeJobBoards) -> Iterator[TestClient]:
-    app = create_app(db_path=tmp_path / "test.db", http=boards.client())
+def llm() -> FakeLLM:
+    return FakeLLM()
+
+
+@pytest.fixture
+def client(tmp_path: Path, boards: FakeJobBoards, llm: FakeLLM) -> Iterator[TestClient]:
+    app = create_app(db_path=tmp_path / "test.db", http=boards.client(), llm=llm)
     with TestClient(app) as test_client:
         yield test_client
 
 
 def configure_search(client: TestClient, settings: dict[str, Any] | None = None) -> None:
+    """Set up everything a run needs: search settings and key, Anthropic key, and a mapped resume."""
     response = client.put("/api/search-settings", json=settings or READY_SETTINGS)
     assert response.status_code == 200, response.text
     response = client.put("/api/settings/search-api-key", json={"key": SEARCH_KEY})
     assert response.status_code == 204, response.text
+    response = client.put("/api/settings/anthropic-api-key", json={"key": ANTHROPIC_KEY})
+    assert response.status_code == 200, response.text
+    if client.get("/api/resume").json() is None:
+        add_ready_resume(client)
 
 
 def discover_boards(
