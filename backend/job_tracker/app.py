@@ -1,11 +1,14 @@
 import json
+import logging
 import os
 import sqlite3
 from pathlib import Path
 from typing import Any
 
 import httpx
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, HTTPException, Request, Response, UploadFile
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
 from job_tracker.companies import ALL_PLATFORMS, PLATFORM_NAMES, Platform
@@ -13,9 +16,15 @@ from job_tracker.db import Database
 from job_tracker.discovery import BraveSearch, supported_for_discovery
 from job_tracker.filtering import refilter_jobs
 from job_tracker.filters import RULES
+from job_tracker.libreoffice import MISSING_MESSAGE, LibreOffice
+from job_tracker.resume import MAX_UPLOAD_BYTES, ResumeError, ResumeStore
 from job_tracker.runs import RunAlreadyActive, RunService, SearchSettingsIncomplete
 from job_tracker.search_settings import SearchSettings, Seniority, SettingsStore, WorkMode
 from job_tracker.sources import job_board_sources
+
+log = logging.getLogger(__name__)
+
+DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 MAX_SETTING_ITEMS = 20
 MAX_SETTING_LENGTH = 100
@@ -58,13 +67,66 @@ class CompanyUpdate(BaseModel):
     blocked: bool
 
 
-def create_app(db_path: Path, http: httpx.Client) -> FastAPI:
+class ResumeMappingIn(BaseModel):
+    summary: list[int] = Field(max_length=500)
+    skills: list[int] = Field(max_length=500)
+
+
+class ResumeSkillsIn(BaseModel):
+    skills: list[str] = Field(max_length=500)
+
+
+def create_app(db_path: Path, http: httpx.Client, office: LibreOffice | None = None) -> FastAPI:
     db = Database(db_path)
     db.initialize()
     settings = SettingsStore(db)
     sources = job_board_sources(http)
     runs = RunService(db, settings, BraveSearch(http), sources)
+    office = office or LibreOffice.detect()
+    if not office.available:
+        log.warning(MISSING_MESSAGE)
+    resumes = ResumeStore(db, db_path.parent / "files", office)
     app = FastAPI(title="Job Tracker")
+
+    @app.exception_handler(ResumeError)
+    def resume_error(request: Request, error: ResumeError) -> JSONResponse:
+        return JSONResponse(status_code=error.status, content={"detail": error.message})
+
+    @app.get("/api/status")
+    def get_status() -> dict[str, Any]:
+        return {
+            "libreoffice": {"available": office.available, "message": None if office.available else MISSING_MESSAGE}
+        }
+
+    @app.get("/api/resume")
+    def get_resume() -> dict[str, Any] | None:
+        return resumes.current()
+
+    @app.post("/api/resume", status_code=201)
+    async def upload_resume(file: UploadFile) -> dict[str, Any]:
+        data = await file.read(MAX_UPLOAD_BYTES + 1)
+        return await run_in_threadpool(resumes.import_docx, file.filename or "", data)
+
+    @app.put("/api/resume/mapping")
+    def save_resume_mapping(body: ResumeMappingIn) -> dict[str, Any]:
+        return resumes.save_mapping(body.summary, body.skills)
+
+    @app.put("/api/resume/skills")
+    def save_resume_skills(body: ResumeSkillsIn) -> dict[str, Any]:
+        return resumes.save_skills(body.skills)
+
+    @app.get("/api/resume/versions")
+    def list_resume_versions() -> list[dict[str, Any]]:
+        return resumes.versions()
+
+    @app.get("/api/resume/versions/{version}/preview.pdf")
+    def get_resume_preview(version: int) -> FileResponse:
+        return FileResponse(resumes.file(version, "preview.pdf"), media_type="application/pdf")
+
+    @app.get("/api/resume/versions/{version}/original.docx")
+    def get_resume_original(version: int) -> FileResponse:
+        resume = resumes.get(version)
+        return FileResponse(resumes.file(version, "master.docx"), media_type=DOCX_TYPE, filename=resume["filename"])
 
     def platform_supported(platform: Platform) -> bool:
         return platform in sources and supported_for_discovery(platform)

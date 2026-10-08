@@ -36,6 +36,14 @@ location and work mode must match yours, and the optional **More filters** (excl
 seniority, years of experience, visa sponsorship, minimum salary) drop the rest. The **Filtered out** tab
 lists every dropped job with the reason, and changing settings re-filters stored jobs without fetching again.
 
+## Resume
+
+On the **Resume** page, upload your resume as a Word `.docx`. Check the PDF preview, mark which paragraphs
+are your Summary and which are your Skills section, and save. Your master skills list is filled in from the Skills
+section; edit it so it holds every skill you have, because tailoring can only use skills from this list. Uploading a
+newer resume creates a new version (earlier versions are kept) that you mark the same way. Resume files are
+stored next to the database, in `~/.job-tracker/files/`.
+
 ## Checks
 
 ```sh

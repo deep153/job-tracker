@@ -19,6 +19,7 @@ import { CompaniesPanel } from "./CompaniesPanel";
 import { FILTER_LABELS, PLATFORM_LABELS, companyName, fullDate, timeAgo, totalFilteredOut } from "./format";
 import { AlertIcon, BriefcaseIcon, CheckIcon, ExternalIcon, PinIcon, PlayIcon, SlidersIcon } from "./icons";
 import { SearchSettingsPanel } from "./SearchSettingsPanel";
+import { Topbar } from "./Topbar";
 
 const POLL_INTERVAL_MS = 700;
 
@@ -108,17 +109,9 @@ export function Dashboard() {
 
   return (
     <div className="app">
-      <header className="topbar">
-        <div className="topbar-inner">
-          <div className="brand">
-            <span className="brand-mark" aria-hidden="true">
-              JT
-            </span>
-            <span className="brand-name">Job Tracker</span>
-          </div>
-          <RunButton running={running} ready={ready} onClick={startRunAndFollow} />
-        </div>
-      </header>
+      <Topbar page="jobs">
+        <RunButton running={running} ready={ready} onClick={startRunAndFollow} />
+      </Topbar>
 
       <div className="layout">
         <aside className="sidebar">

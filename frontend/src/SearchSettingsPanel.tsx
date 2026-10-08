@@ -364,7 +364,7 @@ function ChevronIcon({ open }: { open: boolean }) {
   );
 }
 
-function Field({
+export function Field({
   label,
   hint,
   htmlFor,
@@ -390,7 +390,7 @@ function Field({
   );
 }
 
-function TermInput({
+export function TermInput({
   label,
   terms,
   placeholder,

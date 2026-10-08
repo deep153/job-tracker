@@ -67,6 +67,18 @@ CREATE TABLE IF NOT EXISTS runs (
     filtered_out TEXT NOT NULL DEFAULT '{}',
     errors TEXT NOT NULL DEFAULT '[]'
 );
+
+CREATE TABLE IF NOT EXISTS resume_master (
+    id INTEGER PRIMARY KEY,
+    filename TEXT NOT NULL,
+    directory TEXT NOT NULL,
+    uploaded_at TEXT NOT NULL,
+    paragraphs TEXT NOT NULL,
+    page_count INTEGER NOT NULL,
+    summary_paragraphs TEXT,
+    skills_paragraphs TEXT,
+    skills TEXT
+);
 """
 
 
