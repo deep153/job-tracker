@@ -1,33 +1,109 @@
 import json
 import os
 import sqlite3
-from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
+from pydantic import BaseModel, Field, field_validator
 
-from job_tracker.companies import Company
+from job_tracker.companies import ALL_PLATFORMS, PLATFORM_NAMES, Platform
 from job_tracker.db import Database
-from job_tracker.runs import RunAlreadyActive, RunService
+from job_tracker.discovery import BraveSearch, supported_for_discovery
+from job_tracker.runs import RunAlreadyActive, RunService, SearchSettingsIncomplete
+from job_tracker.search_settings import SearchSettings, SettingsStore, WorkMode
 from job_tracker.sources import job_board_sources
 
+MAX_SETTING_ITEMS = 20
+MAX_SETTING_LENGTH = 100
 
-def create_app(
-    db_path: Path,
-    http: httpx.Client,
-    initial_companies: Sequence[Company] = (),
-) -> FastAPI:
+
+class SearchSettingsIn(BaseModel):
+    roles: list[str] = Field(max_length=MAX_SETTING_ITEMS)
+    locations: list[str] = Field(max_length=MAX_SETTING_ITEMS)
+    work_modes: list[WorkMode]
+    platforms: list[Platform]
+
+    @field_validator("roles", "locations")
+    @classmethod
+    def _clean_terms(cls, values: list[str]) -> list[str]:
+        cleaned: list[str] = []
+        for value in values:
+            term = " ".join(value.split())
+            if len(term) > MAX_SETTING_LENGTH:
+                raise ValueError(f"Keep each entry under {MAX_SETTING_LENGTH} characters.")
+            if term and term.casefold() not in {c.casefold() for c in cleaned}:
+                cleaned.append(term)
+        return cleaned
+
+    @field_validator("work_modes", "platforms")
+    @classmethod
+    def _dedupe(cls, values: list[Any]) -> list[Any]:
+        return list(dict.fromkeys(values))
+
+
+class SearchApiKeyIn(BaseModel):
+    key: str = Field(max_length=500)
+
+
+class CompanyUpdate(BaseModel):
+    blocked: bool
+
+
+def create_app(db_path: Path, http: httpx.Client) -> FastAPI:
     db = Database(db_path)
-    db.initialize(initial_companies)
-    runs = RunService(db, job_board_sources(http))
+    db.initialize()
+    settings = SettingsStore(db)
+    sources = job_board_sources(http)
+    runs = RunService(db, settings, BraveSearch(http), sources)
     app = FastAPI(title="Job Tracker")
+
+    def platform_supported(platform: Platform) -> bool:
+        return platform in sources and supported_for_discovery(platform)
+
+    def search_settings_json() -> dict[str, Any]:
+        current = settings.search()
+        key = settings.search_api_key()
+        missing = current.missing(has_search_key=key is not None)
+        return {
+            "roles": current.roles,
+            "locations": current.locations,
+            "work_modes": current.work_modes,
+            "platforms": current.platforms,
+            "available_platforms": [
+                {"id": p, "name": PLATFORM_NAMES[p], "supported": platform_supported(p)} for p in ALL_PLATFORMS
+            ],
+            "search_api_key": {"set": key is not None, "last4": key[-4:] if key else None},
+            "missing": missing,
+            "ready": not missing,
+        }
+
+    @app.get("/api/search-settings")
+    def get_search_settings() -> dict[str, Any]:
+        return search_settings_json()
+
+    @app.put("/api/search-settings")
+    def save_search_settings(body: SearchSettingsIn) -> dict[str, Any]:
+        unsupported = [PLATFORM_NAMES[p] for p in body.platforms if not platform_supported(p)]
+        if unsupported:
+            raise HTTPException(status_code=422, detail=f"{', '.join(unsupported)} isn't supported yet.")
+        settings.save_search(SearchSettings(body.roles, body.locations, body.work_modes, body.platforms))
+        return search_settings_json()
+
+    @app.put("/api/settings/search-api-key", status_code=204)
+    def save_search_api_key(body: SearchApiKeyIn) -> Response:
+        settings.set_search_api_key(body.key.strip())
+        return Response(status_code=204)
 
     @app.post("/api/runs", status_code=202)
     def start_run() -> dict[str, Any]:
         try:
             run_id = runs.start()
+        except SearchSettingsIncomplete as incomplete:
+            first = incomplete.missing[0]
+            detail = f"Finish your search settings first: {first[0].lower()}{first[1:]}"
+            raise HTTPException(status_code=400, detail=detail) from None
         except RunAlreadyActive:
             raise HTTPException(status_code=409, detail="A run is already in progress.") from None
         return get_run(run_id)
@@ -46,10 +122,42 @@ def create_app(
             raise HTTPException(status_code=404, detail="Run not found.")
         return _run_json(row)
 
+    @app.get("/api/companies")
+    def list_companies() -> list[dict[str, Any]]:
+        with db.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT companies.*, COUNT(jobs.id) AS open_jobs
+                FROM companies
+                LEFT JOIN jobs ON jobs.platform = companies.platform
+                    AND jobs.board_id = companies.board_id AND jobs.closed = 0
+                GROUP BY companies.id
+                ORDER BY companies.blocked, companies.board_id
+                """
+            ).fetchall()
+            return [_company_json(row) for row in rows]
+
+    @app.patch("/api/companies/{company_id}")
+    def update_company(company_id: int, body: CompanyUpdate) -> dict[str, Any]:
+        with db.connect() as conn:
+            updated = conn.execute(
+                "UPDATE companies SET blocked = ? WHERE id = ?", (body.blocked, company_id)
+            ).rowcount
+        if not updated:
+            raise HTTPException(status_code=404, detail="Company not found.")
+        return next(c for c in list_companies() if c["id"] == company_id)
+
     @app.get("/api/jobs")
     def list_jobs() -> list[dict[str, Any]]:
         with db.connect() as conn:
-            rows = conn.execute("SELECT * FROM jobs WHERE closed = 0 ORDER BY updated_at DESC").fetchall()
+            rows = conn.execute(
+                """
+                SELECT jobs.* FROM jobs
+                JOIN companies ON companies.platform = jobs.platform AND companies.board_id = jobs.board_id
+                WHERE jobs.closed = 0 AND companies.blocked = 0
+                ORDER BY jobs.updated_at DESC
+                """
+            ).fetchall()
             return [_job_json(row) for row in rows]
 
     return app
@@ -59,14 +167,32 @@ def _run_json(row: sqlite3.Row) -> dict[str, Any]:
     return {
         "id": row["id"],
         "status": row["status"],
+        "stage": row["stage"],
         "started_at": row["started_at"],
         "finished_at": row["finished_at"],
+        "search_queries": row["search_queries"],
+        "search_queries_capped": bool(row["search_queries_capped"]),
+        "companies_discovered": row["companies_discovered"],
         "companies_total": row["companies_total"],
         "companies_fetched": row["companies_fetched"],
         "new_jobs": row["new_jobs"],
         "updated_jobs": row["updated_jobs"],
         "closed_jobs": row["closed_jobs"],
         "errors": json.loads(row["errors"]),
+    }
+
+
+def _company_json(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "id": row["id"],
+        "platform": row["platform"],
+        "board_id": row["board_id"],
+        "discovered_at": row["discovered_at"],
+        "discovered_query": row["discovered_query"],
+        "blocked": bool(row["blocked"]),
+        "last_fetched_at": row["last_fetched_at"],
+        "last_error": row["last_error"],
+        "open_jobs": row["open_jobs"],
     }
 
 

@@ -1,6 +1,21 @@
 import { useEffect, useState } from "react";
-import { ApiError, getRun, listJobs, listRuns, startRun, type Job, type Run } from "./api";
+import {
+  ApiError,
+  getRun,
+  getSearchSettings,
+  listCompanies,
+  listJobs,
+  listRuns,
+  startRun,
+  type Company,
+  type Job,
+  type Run,
+  type SearchSettings,
+} from "./api";
+import { CompaniesPanel } from "./CompaniesPanel";
 import { PLATFORM_LABELS, companyName, fullDate, timeAgo } from "./format";
+import { AlertIcon, BriefcaseIcon, CheckIcon, ExternalIcon, PinIcon, PlayIcon, SlidersIcon } from "./icons";
+import { SearchSettingsPanel } from "./SearchSettingsPanel";
 
 const POLL_INTERVAL_MS = 700;
 
@@ -9,30 +24,32 @@ type Failure = { message: string; retry: () => void };
 export function Dashboard() {
   const [jobs, setJobs] = useState<Job[] | null>(null);
   const [run, setRun] = useState<Run | null>(null);
+  const [settings, setSettings] = useState<SearchSettings | null>(null);
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [starting, setStarting] = useState(false);
   const [failure, setFailure] = useState<Failure | null>(null);
   const running = starting || run?.status === "running";
+  const ready = settings?.ready ?? false;
 
-  async function loadJobs() {
+  async function load<T>(fetch: () => Promise<T>, apply: (value: T) => void) {
     try {
-      setJobs(await listJobs());
+      apply(await fetch());
     } catch (e) {
       setFailure({ message: (e as Error).message, retry: loadAll });
     }
   }
 
-  async function loadLatestRun() {
-    try {
-      const [latest] = await listRuns();
-      setRun(latest ?? null);
-    } catch (e) {
-      setFailure({ message: (e as Error).message, retry: loadAll });
-    }
-  }
+  const loadJobs = () => load(listJobs, setJobs);
+  const loadCompanies = () => load(listCompanies, setCompanies);
 
   async function loadAll() {
     setFailure(null);
-    await Promise.all([loadJobs(), loadLatestRun()]);
+    await Promise.all([
+      loadJobs(),
+      loadCompanies(),
+      load(getSearchSettings, setSettings),
+      load(listRuns, ([latest]) => setRun(latest ?? null)),
+    ]);
   }
 
   useEffect(() => {
@@ -46,6 +63,9 @@ export function Dashboard() {
         const next = await getRun(run.id);
         if (next.companies_fetched !== run.companies_fetched || next.status !== "running") {
           void loadJobs();
+        }
+        if (next.stage !== run.stage || next.status !== "running") {
+          void loadCompanies();
         }
         setRun(next);
       } catch (e) {
@@ -62,13 +82,20 @@ export function Dashboard() {
       setRun(await startRun());
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
-        await loadLatestRun();
+        await load(listRuns, ([latest]) => setRun(latest ?? null));
+      } else if (e instanceof ApiError && e.status === 400) {
+        await load(getSearchSettings, setSettings);
       } else {
         setFailure({ message: `Couldn't start the run. ${(e as Error).message}`, retry: startRunAndFollow });
       }
     } finally {
       setStarting(false);
     }
+  }
+
+  function updateCompany(updated: Company) {
+    setCompanies((current) => current.map((c) => (c.id === updated.id ? updated : c)));
+    void loadJobs();
   }
 
   return (
@@ -81,46 +108,60 @@ export function Dashboard() {
             </span>
             <span className="brand-name">Job Tracker</span>
           </div>
-          <RunButton running={running} onClick={startRunAndFollow} />
+          <RunButton running={running} ready={ready} onClick={startRunAndFollow} />
         </div>
       </header>
 
-      <main className="content">
-        <div className="page-heading">
-          <div className="page-title">
-            <h1>Jobs</h1>
-            {jobs && jobs.length > 0 && (
-              <span className="count">
-                {jobs.length} {jobs.length === 1 ? "job" : "jobs"}
-              </span>
-            )}
+      <div className="layout">
+        <aside className="sidebar">
+          {settings ? (
+            <SearchSettingsPanel settings={settings} disabled={running} onChange={setSettings} />
+          ) : (
+            !failure && <PanelSkeleton />
+          )}
+          {settings && <CompaniesPanel companies={companies} onChange={updateCompany} />}
+        </aside>
+
+        <main className="content">
+          <div className="page-heading">
+            <div className="page-title">
+              <h1>Jobs</h1>
+              {jobs && jobs.length > 0 && <span className="count">{plural(jobs.length, "job")}</span>}
+            </div>
+            <p className="subtitle">
+              Open postings from companies found with your search settings. Nothing is fetched until you click Run.
+            </p>
           </div>
-          <p className="subtitle">
-            Open postings from the company boards you track. Nothing is fetched until you click Run.
-          </p>
-        </div>
 
-        {failure && (
-          <ErrorBanner message={failure.message} onRetry={failure.retry} onDismiss={() => setFailure(null)} />
-        )}
-        {run?.status === "running" && <RunProgress run={run} />}
-        {run && run.status !== "running" && <RunSummary run={run} />}
+          {failure && (
+            <ErrorBanner message={failure.message} onRetry={failure.retry} onDismiss={() => setFailure(null)} />
+          )}
+          {settings && !settings.ready && !running && <SetupNotice missing={settings.missing} />}
+          {run?.status === "running" && <RunProgress run={run} />}
+          {run && run.status !== "running" && <RunSummary run={run} />}
 
-        {jobs === null ? (
-          !failure && <JobListSkeleton />
-        ) : jobs.length === 0 ? (
-          <EmptyState running={running} onRun={startRunAndFollow} />
-        ) : (
-          <JobList jobs={jobs} />
-        )}
-      </main>
+          {jobs === null ? (
+            !failure && <JobListSkeleton />
+          ) : jobs.length === 0 ? (
+            <EmptyState running={running} ready={ready} hasRun={run !== null} onRun={startRunAndFollow} />
+          ) : (
+            <JobList jobs={jobs} />
+          )}
+        </main>
+      </div>
     </div>
   );
 }
 
-function RunButton({ running, onClick }: { running: boolean; onClick: () => void }) {
+function RunButton({ running, ready, onClick }: { running: boolean; ready: boolean; onClick: () => void }) {
   return (
-    <button className="button button-primary" onClick={onClick} disabled={running} aria-busy={running}>
+    <button
+      className="button button-primary"
+      onClick={onClick}
+      disabled={running || !ready}
+      aria-busy={running}
+      title={!ready && !running ? "Finish your search settings to run." : undefined}
+    >
       {running ? <span className="spinner" aria-hidden="true" /> : <PlayIcon />}
       {running ? "Running…" : "Run"}
     </button>
@@ -131,7 +172,36 @@ function plural(count: number, singular: string, pluralForm = `${singular}s`): s
   return `${count} ${count === 1 ? singular : pluralForm}`;
 }
 
+function SetupNotice({ missing }: { missing: string[] }) {
+  return (
+    <div className="notice notice-info notice-stacked" role="status">
+      <div className="notice-row">
+        <SlidersIcon />
+        <span className="notice-text">Finish your search settings to run:</span>
+      </div>
+      <ul className="notice-list">
+        {missing.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function RunProgress({ run }: { run: Run }) {
+  if (run.stage === "discovering") {
+    return (
+      <div className="notice notice-info notice-stacked" role="status">
+        <div className="notice-row">
+          <span className="spinner spinner-dark" aria-hidden="true" />
+          <span className="notice-text">Searching for companies that match your settings…</span>
+        </div>
+        <div className="progress progress-indeterminate" role="progressbar" aria-label="Searching">
+          <div className="progress-bar" />
+        </div>
+      </div>
+    );
+  }
   const percent = run.companies_total === 0 ? 0 : (run.companies_fetched / run.companies_total) * 100;
   return (
     <div className="notice notice-info notice-stacked" role="status">
@@ -177,7 +247,11 @@ function RunSummary({ run }: { run: Run }) {
     );
   }
 
+  const searchErrors = run.errors.filter((e) => e.kind === "search");
+  const boardErrors = run.errors.filter((e) => e.kind === "board");
   const changes = [
+    run.companies_discovered > 0 && plural(run.companies_discovered, "new company", "new companies"),
+    `${plural(run.companies_total, "company", "companies")} checked`,
     run.new_jobs === 0 ? "no new jobs" : plural(run.new_jobs, "new job"),
     run.updated_jobs > 0 && `${run.updated_jobs} updated`,
     run.closed_jobs > 0 && `${run.closed_jobs} closed`,
@@ -188,19 +262,35 @@ function RunSummary({ run }: { run: Run }) {
       <div className="notice notice-success" role="status">
         <CheckIcon />
         <span className="notice-text">
-          Run finished {when} · {plural(run.companies_total, "company", "companies")} checked · {changes.join(" · ")}
+          Run finished {when} · {changes.join(" · ")}
         </span>
       </div>
-      {run.errors.length > 0 && (
+      {searchErrors.map((error) => (
+        <div className="notice notice-warning" role="status" key={error.message}>
+          <AlertIcon />
+          <span className="notice-text">
+            Couldn't search for new companies. {error.message} Companies found earlier were still checked.
+          </span>
+        </div>
+      ))}
+      {run.search_queries_capped && (
+        <div className="notice notice-muted" role="status">
+          <span className="notice-text">
+            Only the first {run.search_queries} role and location combinations were searched this run. Remove some
+            roles or locations to cover them all.
+          </span>
+        </div>
+      )}
+      {boardErrors.length > 0 && (
         <div className="notice notice-warning notice-stacked" role="status">
           <div className="notice-row">
             <AlertIcon />
             <span className="notice-text">
-              {plural(run.errors.length, "board")} couldn't be fetched. The rest of the run completed normally.
+              {plural(boardErrors.length, "board")} couldn't be fetched. The rest of the run completed normally.
             </span>
           </div>
           <ul className="board-errors">
-            {run.errors.map((error) => (
+            {boardErrors.map((error) => (
               <li key={`${error.platform}/${error.board_id}`}>
                 <strong>{companyName(error.board_id)}</strong>{" "}
                 <span className="badge">{PLATFORM_LABELS[error.platform]}</span> {error.message}
@@ -236,16 +326,51 @@ function ErrorBanner({
   );
 }
 
-function EmptyState({ running, onRun }: { running: boolean; onRun: () => void }) {
+function EmptyState({
+  running,
+  ready,
+  hasRun,
+  onRun,
+}: {
+  running: boolean;
+  ready: boolean;
+  hasRun: boolean;
+  onRun: () => void;
+}) {
+  if (!ready) {
+    return (
+      <section className="empty">
+        <div className="empty-icon" aria-hidden="true">
+          <SlidersIcon size={28} />
+        </div>
+        <h2>Set up your search</h2>
+        <p>
+          Add the roles and locations you want, pick your job boards, and add a search API key. Job Tracker then finds
+          matching companies and their open jobs for you.
+        </p>
+      </section>
+    );
+  }
+  if (hasRun) {
+    return (
+      <section className="empty">
+        <div className="empty-icon" aria-hidden="true">
+          <BriefcaseIcon />
+        </div>
+        <h2>No open jobs right now</h2>
+        <p>None of the companies you track have open postings. Run again later, or broaden your search settings.</p>
+      </section>
+    );
+  }
   return (
     <section className="empty">
       <div className="empty-icon" aria-hidden="true">
         <BriefcaseIcon />
       </div>
       <h2>No jobs yet</h2>
-      <p>Run a fetch to pull open postings from the company boards you track.</p>
+      <p>Run a search to find companies hiring for your roles and pull in their open postings.</p>
       <button className="button button-primary" onClick={onRun} disabled={running}>
-        {running ? "Running…" : "Run your first fetch"}
+        {running ? "Running…" : "Run your first search"}
       </button>
     </section>
   );
@@ -308,68 +433,14 @@ function JobListSkeleton() {
   );
 }
 
-const iconProps = {
-  width: 16,
-  height: 16,
-  viewBox: "0 0 24 24",
-  fill: "none",
-  stroke: "currentColor",
-  strokeWidth: 2,
-  strokeLinecap: "round",
-  strokeLinejoin: "round",
-  "aria-hidden": true,
-} as const;
-
-function PlayIcon() {
+function PanelSkeleton() {
   return (
-    <svg {...iconProps}>
-      <polygon points="6 4 20 12 6 20 6 4" fill="currentColor" />
-    </svg>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg {...iconProps}>
-      <polyline points="20 6 9 17 4 12" />
-    </svg>
-  );
-}
-
-function AlertIcon() {
-  return (
-    <svg {...iconProps}>
-      <circle cx="12" cy="12" r="10" />
-      <line x1="12" y1="8" x2="12" y2="12" />
-      <line x1="12" y1="16" x2="12.01" y2="16" />
-    </svg>
-  );
-}
-
-function PinIcon() {
-  return (
-    <svg {...iconProps} width={14} height={14}>
-      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-      <circle cx="12" cy="10" r="3" />
-    </svg>
-  );
-}
-
-function ExternalIcon() {
-  return (
-    <svg {...iconProps} width={14} height={14}>
-      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-      <polyline points="15 3 21 3 21 9" />
-      <line x1="10" y1="14" x2="21" y2="3" />
-    </svg>
-  );
-}
-
-function BriefcaseIcon() {
-  return (
-    <svg {...iconProps} width={28} height={28} strokeWidth={1.5}>
-      <rect x="2" y="7" width="20" height="14" rx="2" />
-      <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
-    </svg>
+    <section className="panel" aria-busy="true" aria-label="Loading search settings">
+      <div className="panel-body">
+        <div className="skeleton skeleton-title" />
+        <div className="skeleton skeleton-line" />
+        <div className="skeleton skeleton-line" />
+      </div>
+    </section>
   );
 }

@@ -1,16 +1,21 @@
 import sqlite3
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-from job_tracker.companies import Company
-
 _SCHEMA = """
+CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS companies (
     id INTEGER PRIMARY KEY,
     platform TEXT NOT NULL,
     board_id TEXT NOT NULL,
-    enabled INTEGER NOT NULL DEFAULT 1,
+    discovered_at TEXT NOT NULL,
+    discovered_query TEXT NOT NULL,
+    blocked INTEGER NOT NULL DEFAULT 0,
     last_fetched_at TEXT,
     last_error TEXT,
     UNIQUE (platform, board_id)
@@ -43,8 +48,12 @@ CREATE INDEX IF NOT EXISTS jobs_by_board_content ON jobs (platform, board_id, co
 CREATE TABLE IF NOT EXISTS runs (
     id INTEGER PRIMARY KEY,
     status TEXT NOT NULL,
+    stage TEXT NOT NULL DEFAULT 'discovering',
     started_at TEXT NOT NULL,
     finished_at TEXT,
+    search_queries INTEGER NOT NULL DEFAULT 0,
+    search_queries_capped INTEGER NOT NULL DEFAULT 0,
+    companies_discovered INTEGER NOT NULL DEFAULT 0,
     companies_total INTEGER NOT NULL DEFAULT 0,
     companies_fetched INTEGER NOT NULL DEFAULT 0,
     new_jobs INTEGER NOT NULL DEFAULT 0,
@@ -69,11 +78,7 @@ class Database:
         finally:
             conn.close()
 
-    def initialize(self, initial_companies: Sequence[Company]) -> None:
+    def initialize(self) -> None:
         with self.connect() as conn:
             conn.execute("PRAGMA journal_mode = WAL")
             conn.executescript(_SCHEMA)
-            conn.executemany(
-                "INSERT OR IGNORE INTO companies (platform, board_id) VALUES (?, ?)",
-                [(c.platform, c.board_id) for c in initial_companies],
-            )

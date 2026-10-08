@@ -2,6 +2,8 @@ import type { Platform } from "./api";
 
 export const PLATFORM_LABELS: Record<Platform, string> = {
   greenhouse: "Greenhouse",
+  lever: "Lever",
+  ashby: "Ashby",
 };
 
 const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [

@@ -1,4 +1,32 @@
-export type Platform = "greenhouse";
+export type Platform = "greenhouse" | "lever" | "ashby";
+
+export type WorkMode = "remote" | "hybrid" | "onsite";
+
+export type SearchSettingsInput = {
+  roles: string[];
+  locations: string[];
+  work_modes: WorkMode[];
+  platforms: Platform[];
+};
+
+export type SearchSettings = SearchSettingsInput & {
+  available_platforms: { id: Platform; name: string; supported: boolean }[];
+  search_api_key: { set: boolean; last4: string | null };
+  missing: string[];
+  ready: boolean;
+};
+
+export type Company = {
+  id: number;
+  platform: Platform;
+  board_id: string;
+  discovered_at: string;
+  discovered_query: string;
+  blocked: boolean;
+  last_fetched_at: string | null;
+  last_error: string | null;
+  open_jobs: number;
+};
 
 export type Job = {
   id: number;
@@ -17,23 +45,25 @@ export type Job = {
 
 export type RunStatus = "running" | "finished" | "failed" | "interrupted";
 
-export type BoardError = {
-  platform: Platform;
-  board_id: string;
-  message: string;
-};
+export type RunError =
+  | { kind: "board"; platform: Platform; board_id: string; message: string }
+  | { kind: "search"; platform: null; board_id: null; message: string };
 
 export type Run = {
   id: number;
   status: RunStatus;
+  stage: "discovering" | "fetching";
   started_at: string;
   finished_at: string | null;
+  search_queries: number;
+  search_queries_capped: boolean;
+  companies_discovered: number;
   companies_total: number;
   companies_fetched: number;
   new_jobs: number;
   updated_jobs: number;
   closed_jobs: number;
-  errors: BoardError[];
+  errors: RunError[];
 };
 
 export class ApiError extends Error {
@@ -66,11 +96,37 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       );
     }
     const body = (await response.json().catch(() => null)) as { detail?: unknown } | null;
-    const detail = typeof body?.detail === "string" ? body.detail : `Request failed (${response.status}).`;
-    throw new ApiError(detail, response.status);
+    throw new ApiError(errorDetail(body?.detail) ?? `Request failed (${response.status}).`, response.status);
   }
+  if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
+
+/** FastAPI sends a string for our own errors and a list of field errors for request validation. */
+function errorDetail(detail: unknown): string | null {
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail) && typeof detail[0]?.msg === "string") {
+    return (detail[0].msg as string).replace(/^Value error, /, "");
+  }
+  return null;
+}
+
+function sendJson(method: string, body: unknown): RequestInit {
+  return { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+}
+
+export const getSearchSettings = () => request<SearchSettings>("/api/search-settings");
+
+export const saveSearchSettings = (settings: SearchSettingsInput) =>
+  request<SearchSettings>("/api/search-settings", sendJson("PUT", settings));
+
+export const saveSearchApiKey = (key: string) =>
+  request<void>("/api/settings/search-api-key", sendJson("PUT", { key }));
+
+export const listCompanies = () => request<Company[]>("/api/companies");
+
+export const setCompanyBlocked = (id: number, blocked: boolean) =>
+  request<Company>(`/api/companies/${id}`, sendJson("PATCH", { blocked }));
 
 export const listJobs = () => request<Job[]>("/api/jobs");
 

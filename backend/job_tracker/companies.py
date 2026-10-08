@@ -1,10 +1,11 @@
-from dataclasses import dataclass
 from typing import Literal
 
-Platform = Literal["greenhouse"]
+Platform = Literal["greenhouse", "lever", "ashby"]
 
+ALL_PLATFORMS: tuple[Platform, ...] = ("greenhouse", "lever", "ashby")
 
-@dataclass(frozen=True)
-class Company:
-    platform: Platform
-    board_id: str
+PLATFORM_NAMES: dict[Platform, str] = {
+    "greenhouse": "Greenhouse",
+    "lever": "Lever",
+    "ashby": "Ashby",
+}

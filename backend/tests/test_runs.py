@@ -1,12 +1,11 @@
-from job_tracker.companies import Company
-from tests.conftest import MakeClient, run_to_completion, wait_for_run
+from fastapi.testclient import TestClient
+
+from tests.conftest import discover_boards, run_to_completion, wait_for_run
 from tests.fakes import FakeJobBoards
 
-ACME = Company(platform="greenhouse", board_id="acme")
 
-
-def test_run_fetches_greenhouse_postings_into_jobs_list(make_client: MakeClient) -> None:
-    client = make_client([ACME])
+def test_run_fetches_greenhouse_postings_into_jobs_list(client: TestClient, boards: FakeJobBoards) -> None:
+    discover_boards(client, boards, ["acme"])
 
     run = run_to_completion(client)
     assert run["status"] == "finished"
@@ -33,14 +32,12 @@ def test_run_fetches_greenhouse_postings_into_jobs_list(make_client: MakeClient)
     assert by_title["Frontend Engineer"]["remote"] is True
 
 
-def test_no_jobs_before_first_run(make_client: MakeClient) -> None:
-    client = make_client([ACME])
-
+def test_no_jobs_before_first_run(client: TestClient) -> None:
     assert client.get("/api/jobs").json() == []
 
 
-def test_second_run_records_only_the_new_posting(make_client: MakeClient, boards: FakeJobBoards) -> None:
-    client = make_client([ACME])
+def test_second_run_records_only_the_new_posting(client: TestClient, boards: FakeJobBoards) -> None:
+    discover_boards(client, boards, ["acme"])
     first = run_to_completion(client)
     assert first["new_jobs"] == 3
 
@@ -52,8 +49,8 @@ def test_second_run_records_only_the_new_posting(make_client: MakeClient, boards
     assert "Data Engineer" in titles
 
 
-def test_repost_is_one_job_and_removed_posting_is_closed(make_client: MakeClient, boards: FakeJobBoards) -> None:
-    client = make_client([ACME])
+def test_repost_is_one_job_and_removed_posting_is_closed(client: TestClient, boards: FakeJobBoards) -> None:
+    discover_boards(client, boards, ["acme"])
     run_to_completion(client)
 
     boards.serve("greenhouse", "acme", "acme-later")
@@ -73,24 +70,23 @@ def test_repost_is_one_job_and_removed_posting_is_closed(make_client: MakeClient
 
 
 def test_failing_board_is_recorded_and_other_boards_still_complete(
-    make_client: MakeClient, boards: FakeJobBoards
+    client: TestClient, boards: FakeJobBoards
 ) -> None:
-    broken = Company(platform="greenhouse", board_id="broken")
     boards.fail("greenhouse", "broken", status=503)
-    client = make_client([broken, ACME])
+    discover_boards(client, boards, ["broken", "acme"])
 
     run = run_to_completion(client)
 
     assert run["status"] == "finished"
     assert run["companies_fetched"] == 2
     assert run["errors"] == [
-        {"platform": "greenhouse", "board_id": "broken", "message": "The board returned HTTP 503."}
+        {"kind": "board", "platform": "greenhouse", "board_id": "broken", "message": "The board returned HTTP 503."}
     ]
     assert len(client.get("/api/jobs").json()) == 3
 
 
-def test_unknown_board_reports_not_found(make_client: MakeClient) -> None:
-    client = make_client([Company(platform="greenhouse", board_id="no-such-board")])
+def test_unknown_board_reports_not_found(client: TestClient, boards: FakeJobBoards) -> None:
+    discover_boards(client, boards, ["no-such-board"])
 
     run = run_to_completion(client)
 
@@ -98,11 +94,10 @@ def test_unknown_board_reports_not_found(make_client: MakeClient) -> None:
 
 
 def test_progress_is_visible_and_a_second_run_is_refused_while_one_is_active(
-    make_client: MakeClient, boards: FakeJobBoards
+    client: TestClient, boards: FakeJobBoards
 ) -> None:
-    slow = Company(platform="greenhouse", board_id="slow")
     release = boards.hold("greenhouse", "slow")
-    client = make_client([slow, ACME])
+    discover_boards(client, boards, ["slow", "acme"])
 
     started = client.post("/api/runs")
     assert started.status_code == 202
@@ -121,8 +116,8 @@ def test_progress_is_visible_and_a_second_run_is_refused_while_one_is_active(
     assert client.post("/api/runs").status_code == 202
 
 
-def test_past_runs_are_listed_newest_first(make_client: MakeClient) -> None:
-    client = make_client([ACME])
+def test_past_runs_are_listed_newest_first(client: TestClient, boards: FakeJobBoards) -> None:
+    discover_boards(client, boards, ["acme"])
     first = run_to_completion(client)
     second = run_to_completion(client)
 
@@ -131,8 +126,8 @@ def test_past_runs_are_listed_newest_first(make_client: MakeClient) -> None:
     assert [run["id"] for run in runs] == [second["id"], first["id"]]
 
 
-def test_closed_job_reopens_when_it_is_listed_again(make_client: MakeClient, boards: FakeJobBoards) -> None:
-    client = make_client([ACME])
+def test_closed_job_reopens_when_it_is_listed_again(client: TestClient, boards: FakeJobBoards) -> None:
+    discover_boards(client, boards, ["acme"])
     run_to_completion(client)
     boards.serve("greenhouse", "acme", "acme-later")
     run_to_completion(client)

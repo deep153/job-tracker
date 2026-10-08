@@ -7,10 +7,16 @@ import pytest
 from fastapi.testclient import TestClient
 
 from job_tracker.app import create_app
-from job_tracker.companies import Company
-from tests.fakes import FakeJobBoards
+from tests.fakes import FakeJobBoards, greenhouse_job_url
 
-MakeClient = Callable[[list[Company]], TestClient]
+SEARCH_KEY = "brave-test-key-1234"
+
+READY_SETTINGS: dict[str, Any] = {
+    "roles": ["Backend Engineer"],
+    "locations": ["New York, NY"],
+    "work_modes": ["remote", "hybrid", "onsite"],
+    "platforms": ["greenhouse"],
+}
 
 
 @pytest.fixture
@@ -19,22 +25,23 @@ def boards() -> FakeJobBoards:
 
 
 @pytest.fixture
-def make_client(tmp_path: Path, boards: FakeJobBoards) -> Iterator[MakeClient]:
-    clients: list[TestClient] = []
+def client(tmp_path: Path, boards: FakeJobBoards) -> Iterator[TestClient]:
+    app = create_app(db_path=tmp_path / "test.db", http=boards.client())
+    with TestClient(app) as test_client:
+        yield test_client
 
-    def make(companies: list[Company]) -> TestClient:
-        app = create_app(
-            db_path=tmp_path / "test.db",
-            http=boards.client(),
-            initial_companies=companies,
-        )
-        client = TestClient(app)
-        clients.append(client)
-        return client
 
-    yield make
-    for client in clients:
-        client.close()
+def configure_search(client: TestClient, settings: dict[str, Any] | None = None) -> None:
+    response = client.put("/api/search-settings", json=settings or READY_SETTINGS)
+    assert response.status_code == 200, response.text
+    response = client.put("/api/settings/search-api-key", json={"key": SEARCH_KEY})
+    assert response.status_code == 204, response.text
+
+
+def discover_boards(client: TestClient, boards: FakeJobBoards, board_ids: list[str]) -> None:
+    """Configure a ready search whose results point at these Greenhouse boards."""
+    configure_search(client)
+    boards.search_returns([greenhouse_job_url(board_id) for board_id in board_ids])
 
 
 def wait_for_run(client: TestClient, run_id: int, until: Callable[[dict[str, Any]], bool] | None = None) -> dict[str, Any]:
