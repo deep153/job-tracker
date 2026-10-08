@@ -329,7 +329,8 @@ def create_app(
     def list_jobs_below_threshold() -> list[dict[str, Any]]:
         """Scored below my threshold, or not scored yet (those come first)."""
         return passing_jobs(
-            "latest.score IS NULL OR latest.score < ?", "latest.score IS NOT NULL, latest.score DESC, jobs.updated_at DESC"
+            "latest.score IS NULL OR latest.score < ?",
+            "latest.score IS NOT NULL, latest.score DESC, jobs.updated_at DESC",
         )
 
     @app.get("/api/jobs/filtered-out")
