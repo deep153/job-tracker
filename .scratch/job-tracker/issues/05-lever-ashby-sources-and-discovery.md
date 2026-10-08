@@ -4,14 +4,14 @@
 
 **Blocked by:** 04 (Hard filters)
 
-**Status:** ready-for-agent
+**Status:** done (6a08a80)
 
-- [ ] Lever adapter returns normalized postings from the public Lever postings API
-- [ ] Ashby adapter returns normalized postings from the public Ashby job-board API (unlisted jobs skipped)
-- [ ] Salary range, remote flag / work mode and locations are mapped when the platform provides them, and left empty otherwise
-- [ ] Board IDs are extracted from Lever and Ashby job URLs during discovery
-- [ ] The Lever and Ashby switches are no longer marked "coming soon"; disabling one stops both its discovery and its fetching
-- [ ] Posted/updated timestamps from all platforms are stored in one consistent form; the jobs list sorts correctly across platforms
-- [ ] Recorded fixtures for Lever and Ashby are added to the fake HTTP layer, plus fake search results pointing at them
-- [ ] Test: a run with all three platforms enabled stores jobs from all three, each with the correct source platform
-- [ ] Test: salary from a Lever or Ashby posting feeds the minimum-salary filter
+- [x] Lever adapter returns normalized postings from the public Lever postings API
+- [x] Ashby adapter returns normalized postings from the public Ashby job-board API (unlisted jobs skipped)
+- [x] Salary range, remote flag / work mode and locations are mapped when the platform provides them, and left empty otherwise
+- [x] Board IDs are extracted from Lever and Ashby job URLs during discovery
+- [x] The Lever and Ashby switches are no longer marked "coming soon"; disabling one stops both its discovery and its fetching
+- [x] Posted/updated timestamps from all platforms are stored in one consistent form; the jobs list sorts correctly across platforms
+- [x] Recorded fixtures for Lever and Ashby are added to the fake HTTP layer, plus fake search results pointing at them
+- [x] Test: a run with all three platforms enabled stores jobs from all three, each with the correct source platform
+- [x] Test: salary from a Lever or Ashby posting feeds the minimum-salary filter
