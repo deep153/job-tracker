@@ -52,3 +52,10 @@ export function companyName(boardId: string): string {
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
 }
+
+/** An approximate AI cost: cents need more precision than whole dollars do. */
+export function formatCost(usd: number): string {
+  if (usd === 0) return "$0";
+  if (usd < 0.01) return "<$0.01";
+  return `$${usd.toFixed(usd < 10 ? 2 : 0)}`;
+}

@@ -6,17 +6,27 @@ import {
   listCompanies,
   listFilteredOutJobs,
   listJobs,
+  listJobsBelowThreshold,
   listRuns,
   startRun,
   type Company,
   type FilterRule,
   type FilteredJob,
+  type FitScore,
   type Job,
   type Run,
   type SearchSettings,
 } from "./api";
 import { CompaniesPanel } from "./CompaniesPanel";
-import { FILTER_LABELS, PLATFORM_LABELS, companyName, fullDate, timeAgo, totalFilteredOut } from "./format";
+import {
+  FILTER_LABELS,
+  PLATFORM_LABELS,
+  companyName,
+  formatCost,
+  fullDate,
+  timeAgo,
+  totalFilteredOut,
+} from "./format";
 import { AlertIcon, BriefcaseIcon, CheckIcon, ExternalIcon, PinIcon, PlayIcon, SlidersIcon } from "./icons";
 import { SearchSettingsPanel } from "./SearchSettingsPanel";
 import { Topbar } from "./Topbar";
@@ -25,10 +35,11 @@ const POLL_INTERVAL_MS = 700;
 
 type Failure = { message: string; retry: () => void };
 
-type View = "matches" | "filtered";
+type View = "matches" | "below" | "filtered";
 
 export function Dashboard() {
   const [jobs, setJobs] = useState<Job[] | null>(null);
+  const [below, setBelow] = useState<Job[] | null>(null);
   const [filtered, setFiltered] = useState<FilteredJob[] | null>(null);
   const [view, setView] = useState<View>("matches");
   const [run, setRun] = useState<Run | null>(null);
@@ -38,7 +49,8 @@ export function Dashboard() {
   const [failure, setFailure] = useState<Failure | null>(null);
   const running = starting || run?.status === "running";
   const ready = settings?.ready ?? false;
-  const showTabs = jobs !== null && filtered !== null && (jobs.length > 0 || filtered.length > 0);
+  const loaded = jobs !== null && below !== null && filtered !== null;
+  const showTabs = loaded && (jobs.length > 0 || below.length > 0 || filtered.length > 0);
 
   async function load<T>(fetch: () => Promise<T>, apply: (value: T) => void) {
     try {
@@ -48,7 +60,12 @@ export function Dashboard() {
     }
   }
 
-  const loadJobs = () => Promise.all([load(listJobs, setJobs), load(listFilteredOutJobs, setFiltered)]);
+  const loadJobs = () =>
+    Promise.all([
+      load(listJobs, setJobs),
+      load(listJobsBelowThreshold, setBelow),
+      load(listFilteredOutJobs, setFiltered),
+    ]);
   const loadCompanies = () => load(listCompanies, setCompanies);
 
   async function loadAll() {
@@ -70,7 +87,11 @@ export function Dashboard() {
     const timer = setTimeout(async () => {
       try {
         const next = await getRun(run.id);
-        if (next.companies_fetched !== run.companies_fetched || next.status !== "running") {
+        if (
+          next.companies_fetched !== run.companies_fetched ||
+          next.scored_jobs !== run.scored_jobs ||
+          next.status !== "running"
+        ) {
           void loadJobs();
         }
         if (next.stage !== run.stage || next.status !== "running") {
@@ -136,8 +157,8 @@ export function Dashboard() {
               <h1>Jobs</h1>
             </div>
             <p className="subtitle">
-              Open postings from companies found with your search settings that pass your filters. Nothing is fetched
-              until you click Run.
+              Open postings that pass your filters and that Claude scored at or above your match threshold, best fit
+              first. Nothing is fetched or scored until you click Run.
             </p>
           </div>
 
@@ -148,15 +169,19 @@ export function Dashboard() {
           {run?.status === "running" && <RunProgress run={run} />}
           {run && run.status !== "running" && <RunSummary run={run} onReview={() => setView("filtered")} />}
 
-          {showTabs && jobs && filtered && (
-            <ViewTabs view={view} matches={jobs.length} filteredOut={filtered.length} onChange={setView} />
+          {showTabs && (
+            <ViewTabs
+              view={view}
+              counts={{ matches: jobs.length, below: below.length, filtered: filtered.length }}
+              onChange={setView}
+            />
           )}
           <div
             role={showTabs ? "tabpanel" : undefined}
             id="jobs-panel"
             aria-labelledby={showTabs ? `tab-${view}` : undefined}
           >
-            {jobs === null || filtered === null ? (
+            {!loaded ? (
               !failure && <JobListSkeleton />
             ) : view === "filtered" ? (
               filtered.length === 0 ? (
@@ -164,14 +189,22 @@ export function Dashboard() {
               ) : (
                 <JobList jobs={filtered} />
               )
+            ) : view === "below" ? (
+              below.length === 0 ? (
+                <BelowEmptyState threshold={settings?.min_score ?? 70} />
+              ) : (
+                <JobList jobs={below} />
+              )
             ) : jobs.length === 0 ? (
               <EmptyState
                 running={running}
                 ready={ready}
                 hasRun={run !== null}
+                below={below.length}
                 filteredOut={filtered.length}
+                threshold={settings?.min_score ?? 70}
                 onRun={startRunAndFollow}
-                onReview={() => setView("filtered")}
+                onReview={setView}
               />
             ) : (
               <JobList jobs={jobs} />
@@ -190,7 +223,7 @@ function RunButton({ running, ready, onClick }: { running: boolean; ready: boole
       onClick={onClick}
       disabled={running || !ready}
       aria-busy={running}
-      title={!ready && !running ? "Finish your search settings to run." : undefined}
+      title={!ready && !running ? "Finish setting up to run." : undefined}
     >
       {running ? <span className="spinner" aria-hidden="true" /> : <PlayIcon />}
       {running ? "Running…" : "Run"}
@@ -215,17 +248,35 @@ function formatSalary(salary: NonNullable<Job["salary"]>): string {
   return money((max ?? min) as number);
 }
 
+/** Setup steps done on another page link to it; the rest are in the Search settings panel. */
+function setupLink(item: string): { href: string; label: string } | null {
+  if (/anthropic/i.test(item)) return { href: "#/settings", label: "Open Settings" };
+  if (/resume/i.test(item)) return { href: "#/resume", label: "Open Resume" };
+  return null;
+}
+
 function SetupNotice({ missing }: { missing: string[] }) {
   return (
     <div className="notice notice-info notice-stacked" role="status">
       <div className="notice-row">
         <SlidersIcon />
-        <span className="notice-text">Finish your search settings to run:</span>
+        <span className="notice-text">Finish setting up to run:</span>
       </div>
       <ul className="notice-list">
-        {missing.map((item) => (
-          <li key={item}>{item}</li>
-        ))}
+        {missing.map((item) => {
+          const link = setupLink(item);
+          return (
+            <li key={item}>
+              {item}
+              {link && (
+                <>
+                  {" "}
+                  <a href={link.href}>{link.label}</a>
+                </>
+              )}
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
@@ -241,6 +292,30 @@ function RunProgress({ run }: { run: Run }) {
         </div>
         <div className="progress progress-indeterminate" role="progressbar" aria-label="Searching">
           <div className="progress-bar" />
+        </div>
+      </div>
+    );
+  }
+  if (run.stage === "scoring") {
+    const scoredPercent = run.scoring_total === 0 ? 0 : (run.scored_jobs / run.scoring_total) * 100;
+    return (
+      <div className="notice notice-info notice-stacked" role="status">
+        <div className="notice-row">
+          <span className="spinner spinner-dark" aria-hidden="true" />
+          <span className="notice-text">
+            Scoring fit with Claude: {run.scored_jobs} of {plural(run.scoring_total, "job")}
+            {run.matched_jobs > 0 && ` · ${plural(run.matched_jobs, "match", "matches")} so far`}
+          </span>
+        </div>
+        <div
+          className="progress"
+          role="progressbar"
+          aria-label="Scoring"
+          aria-valuemin={0}
+          aria-valuemax={run.scoring_total}
+          aria-valuenow={run.scored_jobs}
+        >
+          <div className="progress-bar" style={{ width: `${scoredPercent}%` }} />
         </div>
       </div>
     );
@@ -293,12 +368,16 @@ function RunSummary({ run, onReview }: { run: Run; onReview: () => void }) {
 
   const searchErrors = run.errors.filter((e) => e.kind === "search");
   const boardErrors = run.errors.filter((e) => e.kind === "board");
+  const scoringErrors = run.errors.filter((e) => e.kind === "scoring");
   const changes = [
     run.companies_discovered > 0 && plural(run.companies_discovered, "new company", "new companies"),
     `${plural(run.companies_total, "company", "companies")} checked`,
     run.new_jobs === 0 ? "no new jobs" : plural(run.new_jobs, "new job"),
     run.updated_jobs > 0 && `${run.updated_jobs} updated`,
     run.closed_jobs > 0 && `${run.closed_jobs} closed`,
+    run.scored_jobs > 0 && `${run.scored_jobs} scored`,
+    run.scored_jobs > 0 && plural(run.matched_jobs, "new match", "new matches"),
+    run.ai_cost_usd > 0 && `about ${formatCost(run.ai_cost_usd)} AI cost`,
   ].filter(Boolean);
   const filteredOut = totalFilteredOut(run.filtered_out);
   const byRule = (Object.entries(run.filtered_out) as [FilterRule, number][]).filter(([, count]) => count > 0);
@@ -333,6 +412,20 @@ function RunSummary({ run, onReview }: { run: Run; onReview: () => void }) {
           <AlertIcon />
           <span className="notice-text">
             Couldn't search for new companies. {error.message} Companies found earlier were still checked.
+          </span>
+        </div>
+      ))}
+      {scoringErrors.map((error) => (
+        <div className="notice notice-warning" role="status" key={error.message}>
+          <AlertIcon />
+          <span className="notice-text">
+            {error.message}
+            {/API key|model|credit/i.test(error.message) && (
+              <>
+                {" "}
+                <a href="#/settings">Open Settings</a>
+              </>
+            )}
           </span>
         </div>
       ))}
@@ -391,18 +484,17 @@ function ErrorBanner({
 
 function ViewTabs({
   view,
-  matches,
-  filteredOut,
+  counts,
   onChange,
 }: {
   view: View;
-  matches: number;
-  filteredOut: number;
+  counts: Record<View, number>;
   onChange: (view: View) => void;
 }) {
   const tabs: { id: View; label: string; count: number }[] = [
-    { id: "matches", label: "Matches", count: matches },
-    { id: "filtered", label: "Filtered out", count: filteredOut },
+    { id: "matches", label: "Matches", count: counts.matches },
+    { id: "below", label: "Below threshold", count: counts.below },
+    { id: "filtered", label: "Filtered out", count: counts.filtered },
   ];
   return (
     <div className="view-tabs" role="tablist" aria-label="Jobs">
@@ -437,20 +529,39 @@ function FilteredEmptyState() {
   );
 }
 
+function BelowEmptyState({ threshold }: { threshold: number }) {
+  return (
+    <section className="empty">
+      <div className="empty-icon" aria-hidden="true">
+        <SlidersIcon size={28} />
+      </div>
+      <h2>Nothing below your threshold</h2>
+      <p>
+        Jobs that pass your filters but score under {threshold}, and jobs not scored yet, show up here with Claude's
+        reasons.
+      </p>
+    </section>
+  );
+}
+
 function EmptyState({
   running,
   ready,
   hasRun,
+  below,
   filteredOut,
+  threshold,
   onRun,
   onReview,
 }: {
   running: boolean;
   ready: boolean;
   hasRun: boolean;
+  below: number;
   filteredOut: number;
+  threshold: number;
   onRun: () => void;
-  onReview: () => void;
+  onReview: (view: View) => void;
 }) {
   if (!ready) {
     return (
@@ -460,9 +571,26 @@ function EmptyState({
         </div>
         <h2>Set up your search</h2>
         <p>
-          Add the roles and locations you want, pick your job boards, and add a search API key. Job Tracker then finds
-          matching companies and their open jobs for you.
+          Add the roles and locations you want, pick your job boards and add a search API key. Then add your Anthropic
+          API key in Settings and your resume, so Claude can score how well each job fits you.
         </p>
+      </section>
+    );
+  }
+  if (below > 0) {
+    return (
+      <section className="empty">
+        <div className="empty-icon" aria-hidden="true">
+          <SlidersIcon size={28} />
+        </div>
+        <h2>No strong matches yet</h2>
+        <p>
+          {plural(below, "job passes", "jobs pass")} your filters but {below === 1 ? "isn't" : "aren't"} scored{" "}
+          {threshold} or higher yet. Review them, or lower your match threshold in Search settings.
+        </p>
+        <button className="button button-secondary" onClick={() => onReview("below")}>
+          Review jobs below threshold
+        </button>
       </section>
     );
   }
@@ -477,7 +605,7 @@ function EmptyState({
           {plural(filteredOut, "open job was", "open jobs were")} filtered out. Review them to see whether a filter is
           too strict.
         </p>
-        <button className="button button-secondary" onClick={onReview}>
+        <button className="button button-secondary" onClick={() => onReview("filtered")}>
           Review filtered jobs
         </button>
       </section>
@@ -500,7 +628,7 @@ function EmptyState({
         <BriefcaseIcon />
       </div>
       <h2>No jobs yet</h2>
-      <p>Run a search to find companies hiring for your roles and pull in their open postings.</p>
+      <p>Run a search to find companies hiring for your roles, pull in their open postings and score each for fit.</p>
       <button className="button button-primary" onClick={onRun} disabled={running}>
         {running ? "Running…" : "Run your first search"}
       </button>
@@ -524,7 +652,10 @@ function JobRow({ job }: { job: Job | FilteredJob }) {
   return (
     <li className={`job${rejection ? " is-filtered" : ""}`}>
       <div className="job-main">
-        <h3 className="job-title">{job.title}</h3>
+        <h3 className="job-title">
+          {!rejection && <ScoreBadge score={job.score} />}
+          {job.title}
+        </h3>
         <div className="job-meta">
           <span className="job-company">{companyName(job.company)}</span>
           <span className="dot" aria-hidden="true" />
@@ -537,6 +668,7 @@ function JobRow({ job }: { job: Job | FilteredJob }) {
             {rejection.reason}
           </p>
         )}
+        {!rejection && job.score && <ScoreDetails score={job.score} />}
       </div>
       <div className="job-location">
         <PinIcon />
@@ -555,6 +687,68 @@ function JobRow({ job }: { job: Job | FilteredJob }) {
         <span className="visually-hidden">(opens in a new tab)</span>
       </a>
     </li>
+  );
+}
+
+function scoreLevel(score: number): string {
+  if (score >= 85) return "excellent";
+  if (score >= 70) return "good";
+  if (score >= 50) return "fair";
+  return "poor";
+}
+
+function ScoreBadge({ score }: { score: FitScore | null }) {
+  if (score === null) {
+    return (
+      <span className="score score-none" title="Scored on the next run">
+        <span className="visually-hidden">Not scored yet</span>
+        <span aria-hidden="true">–</span>
+      </span>
+    );
+  }
+  return (
+    <span
+      className={`score score-${scoreLevel(score.score)}`}
+      title={`Fit score ${score.score} of 100, by ${score.model}, ${timeAgo(score.scored_at)}`}
+    >
+      <span className="visually-hidden">Fit score </span>
+      {score.score}
+    </span>
+  );
+}
+
+function ScoreDetails({ score }: { score: FitScore }) {
+  return (
+    <div className="score-details">
+      {score.reasons.length > 0 && (
+        <ul className="score-reasons">
+          {score.reasons.map((reason) => (
+            <li key={reason}>{reason}</li>
+          ))}
+        </ul>
+      )}
+      {(score.matched_keywords.length > 0 || score.missing_keywords.length > 0) && (
+        <div className="keywords">
+          {score.matched_keywords.length > 0 && (
+            <span className="visually-hidden">Matched keywords: {score.matched_keywords.join(", ")}.</span>
+          )}
+          {score.matched_keywords.map((keyword) => (
+            <span className="keyword keyword-matched" key={`m-${keyword}`} aria-hidden="true">
+              <CheckIcon />
+              {keyword}
+            </span>
+          ))}
+          {score.missing_keywords.length > 0 && (
+            <span className="visually-hidden">Missing keywords: {score.missing_keywords.join(", ")}.</span>
+          )}
+          {score.missing_keywords.map((keyword) => (
+            <span className="keyword keyword-missing" key={`x-${keyword}`} aria-hidden="true" title="Not on your resume">
+              {keyword}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

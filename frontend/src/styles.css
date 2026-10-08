@@ -1513,6 +1513,162 @@ select.text-input {
   }
 }
 
+/* Fit scores */
+
+.job-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.score {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  min-width: 34px;
+  height: 24px;
+  padding: 0 6px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.score-excellent {
+  background: var(--green);
+  color: #fff;
+}
+
+.score-good {
+  background: var(--green-soft);
+  color: var(--green);
+  box-shadow: inset 0 0 0 1px #abefc6;
+}
+
+.score-fair {
+  background: #fffaeb;
+  color: #b54708;
+  box-shadow: inset 0 0 0 1px #fedf89;
+}
+
+.score-poor {
+  background: #f2f4f7;
+  color: var(--text-muted);
+}
+
+.score-none {
+  background: transparent;
+  color: var(--text-subtle);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+
+.score-details {
+  margin-top: 8px;
+}
+
+.score-reasons {
+  margin: 0;
+  padding-left: 18px;
+  color: #344054;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.keywords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.keyword {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.keyword svg {
+  width: 12px;
+  height: 12px;
+}
+
+.keyword-matched {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.keyword-missing {
+  background: var(--surface);
+  color: var(--text-muted);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  text-decoration: line-through;
+  text-decoration-color: var(--text-subtle);
+}
+
+.affix-input-end {
+  width: 120px;
+}
+
+/* Settings page */
+
+.page-narrow {
+  max-width: 760px;
+}
+
+.settings-skeleton {
+  height: 260px;
+}
+
+.models-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.cost-total {
+  margin-left: auto;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.cost-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cost-table caption {
+  padding-bottom: 6px;
+  text-align: left;
+  font-weight: 600;
+}
+
+.cost-table th {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  font-weight: 500;
+  text-align: left;
+}
+
+.cost-table td {
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cost-table th:last-child,
+.cost-table td:last-child {
+  text-align: right;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;

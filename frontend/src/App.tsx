@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
 import { Dashboard } from "./Dashboard";
 import { ResumePage } from "./ResumePage";
+import { SettingsPage } from "./SettingsPage";
 import type { Page } from "./Topbar";
 
 function pageFromHash(): Page {
-  return window.location.hash === "#/resume" ? "resume" : "jobs";
+  if (window.location.hash === "#/resume") return "resume";
+  if (window.location.hash === "#/settings") return "settings";
+  return "jobs";
 }
 
 export function App() {
@@ -19,5 +22,7 @@ export function App() {
     return () => window.removeEventListener("hashchange", onChange);
   }, []);
 
-  return page === "resume" ? <ResumePage /> : <Dashboard />;
+  if (page === "resume") return <ResumePage />;
+  if (page === "settings") return <SettingsPage />;
+  return <Dashboard />;
 }

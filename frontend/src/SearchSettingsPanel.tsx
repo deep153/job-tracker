@@ -30,7 +30,7 @@ const SENIORITIES: { id: Seniority; label: string }[] = [
 
 function toInput(settings: SearchSettings): SearchSettingsInput {
   const { roles, locations, work_modes, platforms } = settings;
-  const { excluded_keywords, seniority, years_experience, needs_sponsorship, min_salary } = settings;
+  const { excluded_keywords, seniority, years_experience, needs_sponsorship, min_salary, min_score } = settings;
   return {
     roles,
     locations,
@@ -41,6 +41,7 @@ function toInput(settings: SearchSettings): SearchSettingsInput {
     years_experience,
     needs_sponsorship,
     min_salary,
+    min_score,
   };
 }
 
@@ -182,6 +183,22 @@ export function SearchSettingsPanel({
               </li>
             ))}
           </ul>
+        </Field>
+
+        <Field
+          label="Match threshold"
+          htmlFor="min-score"
+          hint="Jobs with a fit score at or above this show as matches. Changing it doesn't rescore anything."
+        >
+          <div className="affix-input affix-input-end">
+            <input
+              id="min-score"
+              inputMode="numeric"
+              value={draft.min_score}
+              onChange={(event) => edit({ min_score: Math.min(parseWholeNumber(event.target.value) ?? 0, 100) })}
+            />
+            <span aria-hidden="true">/ 100</span>
+          </div>
         </Field>
 
         <MoreFilters draft={draft} onChange={edit} />
@@ -333,6 +350,7 @@ function SettingsSummary({ settings }: { settings: SearchSettings }) {
     settings.roles.join(", "),
     [...settings.locations, ...modes].join(" · "),
     platforms.join(", "),
+    `Matches score ${settings.min_score}+`,
     more > 0 && `${more} more ${more === 1 ? "filter" : "filters"} on`,
   ].filter((line): line is string => Boolean(line));
   return (
@@ -454,7 +472,37 @@ function SearchApiKeyField({
   settings: SearchSettings;
   onChange: (settings: SearchSettings) => void;
 }) {
-  const stored = settings.search_api_key;
+  return (
+    <ApiKeyField
+      label="Search API key"
+      placeholder="Paste your Brave Search API key"
+      stored={settings.search_api_key}
+      onSave={async (key) => {
+        await saveSearchApiKey(key);
+        onChange(await getSearchSettings());
+      }}
+    >
+      Used to find company job boards. Stored only on this machine.{" "}
+      <a href={SEARCH_API_SIGNUP} target="_blank" rel="noreferrer">
+        Get a key
+      </a>
+    </ApiKeyField>
+  );
+}
+
+export function ApiKeyField({
+  label,
+  placeholder,
+  stored,
+  onSave,
+  children,
+}: {
+  label: string;
+  placeholder: string;
+  stored: { set: boolean; last4: string | null };
+  onSave: (key: string) => Promise<void>;
+  children: ReactNode;
+}) {
   const [editing, setEditing] = useState(!stored.set);
   const [key, setKey] = useState("");
   const [saving, setSaving] = useState(false);
@@ -464,8 +512,7 @@ function SearchApiKeyField({
     setSaving(true);
     setError(null);
     try {
-      await saveSearchApiKey(key);
-      onChange(await getSearchSettings());
+      await onSave(key);
       setKey("");
       setEditing(false);
     } catch (e) {
@@ -477,28 +524,23 @@ function SearchApiKeyField({
 
   return (
     <div className="field api-key">
-      <div className="field-label">Search API key</div>
+      <div className="field-label">{label}</div>
       {editing ? (
         <form
           className="api-key-form"
           onSubmit={(event) => {
             event.preventDefault();
-            if (key.trim()) void save();
+            if (key.trim() && !saving) void save();
           }}
         >
           <input
             className="text-input"
             type="password"
             autoComplete="off"
-            aria-label="Search API key"
-            placeholder="Paste your Brave Search API key"
+            aria-label={label}
+            placeholder={placeholder}
             value={key}
             onChange={(event) => setKey(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key !== "Enter") return;
-              event.preventDefault();
-              if (key.trim() && !saving) void save();
-            }}
           />
           <button type="submit" className="button button-secondary button-small" disabled={!key.trim() || saving}>
             {saving ? "Saving…" : "Save key"}
@@ -525,12 +567,7 @@ function SearchApiKeyField({
           {error}
         </p>
       )}
-      <p className="field-hint">
-        Used to find company job boards. Stored only on this machine.{" "}
-        <a href={SEARCH_API_SIGNUP} target="_blank" rel="noreferrer">
-          Get a key
-        </a>
-      </p>
+      <p className="field-hint">{children}</p>
     </div>
   );
 }

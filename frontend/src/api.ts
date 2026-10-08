@@ -14,6 +14,7 @@ export type SearchSettingsInput = {
   years_experience: number | null;
   needs_sponsorship: boolean;
   min_salary: number | null;
+  min_score: number;
 };
 
 export type FilterRule = "role" | "excluded_keyword" | "location" | "seniority" | "experience" | "sponsorship" | "salary";
@@ -37,6 +38,16 @@ export type Company = {
   open_jobs: number;
 };
 
+export type FitScore = {
+  score: number;
+  reasons: string[];
+  matched_keywords: string[];
+  missing_keywords: string[];
+  model: string;
+  resume_version: number;
+  scored_at: string;
+};
+
 export type Job = {
   id: number;
   platform: Platform;
@@ -51,6 +62,7 @@ export type Job = {
   posting_url: string;
   application_url: string;
   updated_at: string;
+  score: FitScore | null;
 };
 
 export type FilteredJob = Job & { rejection: { rule: FilterRule; reason: string } };
@@ -59,12 +71,12 @@ export type RunStatus = "running" | "finished" | "failed" | "interrupted";
 
 export type RunError =
   | { kind: "board"; platform: Platform; board_id: string; message: string }
-  | { kind: "search"; platform: null; board_id: null; message: string };
+  | { kind: "search" | "scoring"; platform: null; board_id: null; message: string };
 
 export type Run = {
   id: number;
   status: RunStatus;
-  stage: "discovering" | "fetching";
+  stage: "discovering" | "fetching" | "scoring";
   started_at: string;
   finished_at: string | null;
   search_queries: number;
@@ -77,6 +89,23 @@ export type Run = {
   closed_jobs: number;
   filtered_out: Record<FilterRule, number>;
   errors: RunError[];
+  scoring_total: number;
+  scored_jobs: number;
+  matched_jobs: number;
+  ai_cost_usd: number;
+};
+
+export type AiSettings = {
+  anthropic_api_key: { set: boolean; last4: string | null };
+  scoring_model: string;
+  tailoring_model: string;
+  suggested_models: string[];
+};
+
+export type AiCosts = {
+  total_usd: number;
+  by_kind: { kind: string; calls: number; cost_usd: number; input_tokens: number; output_tokens: number }[];
+  recent_runs: { id: number; started_at: string; scored_jobs: number; ai_cost_usd: number }[];
 };
 
 export type ResumeParagraph = {
@@ -175,6 +204,8 @@ export const setCompanyBlocked = (id: number, blocked: boolean) =>
 
 export const listJobs = () => request<Job[]>("/api/jobs");
 
+export const listJobsBelowThreshold = () => request<Job[]>("/api/jobs/below-threshold");
+
 export const listFilteredOutJobs = () => request<FilteredJob[]>("/api/jobs/filtered-out");
 
 export const startRun = () => request<Run>("/api/runs", { method: "POST" });
@@ -200,3 +231,13 @@ export const saveResumeMapping = (mapping: ResumeMapping) =>
 
 export const saveResumeSkills = (skills: string[]) =>
   request<Resume>("/api/resume/skills", sendJson("PUT", { skills }));
+
+export const getAiSettings = () => request<AiSettings>("/api/settings");
+
+export const saveAnthropicApiKey = (key: string) =>
+  request<AiSettings>("/api/settings/anthropic-api-key", sendJson("PUT", { key }));
+
+export const saveModels = (scoring_model: string, tailoring_model: string) =>
+  request<AiSettings>("/api/settings/models", sendJson("PUT", { scoring_model, tailoring_model }));
+
+export const getAiCosts = () => request<AiCosts>("/api/settings/costs");

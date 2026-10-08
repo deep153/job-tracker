@@ -2,11 +2,12 @@ import { useEffect, useState, type ReactNode } from "react";
 import { getStatus, type SystemStatus } from "./api";
 import { AlertIcon } from "./icons";
 
-export type Page = "jobs" | "resume";
+export type Page = "jobs" | "resume" | "settings";
 
 const PAGES: { id: Page; label: string; href: string }[] = [
   { id: "jobs", label: "Jobs", href: "#/" },
   { id: "resume", label: "Resume", href: "#/resume" },
+  { id: "settings", label: "Settings", href: "#/settings" },
 ];
 
 // Checked once per page load: LibreOffice is detected when the backend starts.
