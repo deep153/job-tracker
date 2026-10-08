@@ -18,6 +18,13 @@ READY_SETTINGS: dict[str, Any] = {
     "platforms": ["greenhouse"],
 }
 
+# Lets every posting in the recorded fixtures through the hard filters.
+BROAD_SETTINGS: dict[str, Any] = {
+    **READY_SETTINGS,
+    "roles": ["Engineer"],
+    "locations": ["New York, NY", "San Francisco, CA", "Chicago, IL"],
+}
+
 
 @pytest.fixture
 def boards() -> FakeJobBoards:
@@ -38,9 +45,11 @@ def configure_search(client: TestClient, settings: dict[str, Any] | None = None)
     assert response.status_code == 204, response.text
 
 
-def discover_boards(client: TestClient, boards: FakeJobBoards, board_ids: list[str]) -> None:
+def discover_boards(
+    client: TestClient, boards: FakeJobBoards, board_ids: list[str], settings: dict[str, Any] | None = None
+) -> None:
     """Configure a ready search whose results point at these Greenhouse boards."""
-    configure_search(client)
+    configure_search(client, settings or BROAD_SETTINGS)
     boards.search_returns([greenhouse_job_url(board_id) for board_id in board_ids])
 
 

@@ -2,6 +2,7 @@ import json
 import logging
 import sqlite3
 import threading
+from collections import Counter
 from collections.abc import Mapping
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
@@ -13,6 +14,7 @@ from job_tracker.board_sync import sync_board
 from job_tracker.companies import Platform
 from job_tracker.db import Database
 from job_tracker.discovery import WebSearch, discover
+from job_tracker.filtering import refilter_jobs
 from job_tracker.postings import Posting
 from job_tracker.search_settings import SearchSettings, SettingsStore
 from job_tracker.sources import JobBoardSource
@@ -50,7 +52,7 @@ class SearchSettingsIncomplete(Exception):
 
 
 class RunService:
-    """Executes job runs in the background, one at a time: discover companies, then fetch them."""
+    """Executes job runs in the background, one at a time: discover companies, then fetch and filter their jobs."""
 
     def __init__(
         self,
@@ -157,6 +159,11 @@ class RunService:
         seen_at = _now()
         with self._db.connect() as conn:
             result = sync_board(conn, platform, board_id, postings, seen_at)
+            rejected = refilter_jobs(conn, result.to_filter)
+            if rejected:
+                row = conn.execute("SELECT filtered_out FROM runs WHERE id = ?", (run_id,)).fetchone()
+                totals = Counter(json.loads(row["filtered_out"])) + rejected
+                conn.execute("UPDATE runs SET filtered_out = ? WHERE id = ?", (json.dumps(totals), run_id))
             conn.execute(
                 "UPDATE companies SET last_fetched_at = ?, last_error = NULL WHERE platform = ? AND board_id = ?",
                 (seen_at, platform, board_id),

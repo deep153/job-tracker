@@ -6,6 +6,7 @@ import {
   type Platform,
   type SearchSettings,
   type SearchSettingsInput,
+  type Seniority,
   type WorkMode,
 } from "./api";
 import { KeyIcon, SlidersIcon } from "./icons";
@@ -18,9 +19,44 @@ const WORK_MODES: { id: WorkMode; label: string }[] = [
 
 const SEARCH_API_SIGNUP = "https://brave.com/search/api/";
 
+const SENIORITIES: { id: Seniority; label: string }[] = [
+  { id: "intern", label: "Intern" },
+  { id: "junior", label: "Junior" },
+  { id: "mid", label: "Mid-level" },
+  { id: "senior", label: "Senior" },
+  { id: "staff", label: "Staff" },
+  { id: "principal", label: "Principal" },
+];
+
 function toInput(settings: SearchSettings): SearchSettingsInput {
   const { roles, locations, work_modes, platforms } = settings;
-  return { roles, locations, work_modes, platforms };
+  const { excluded_keywords, seniority, years_experience, needs_sponsorship, min_salary } = settings;
+  return {
+    roles,
+    locations,
+    work_modes,
+    platforms,
+    excluded_keywords,
+    seniority,
+    years_experience,
+    needs_sponsorship,
+    min_salary,
+  };
+}
+
+function activeMoreFilters(input: SearchSettingsInput): number {
+  return [
+    input.excluded_keywords.length > 0,
+    input.seniority !== null,
+    input.years_experience !== null,
+    input.needs_sponsorship,
+    input.min_salary !== null,
+  ].filter(Boolean).length;
+}
+
+function parseWholeNumber(text: string): number | null {
+  const digits = text.replace(/\D/g, "");
+  return digits === "" ? null : Number(digits);
 }
 
 function sameInput(a: SearchSettingsInput, b: SearchSettingsInput): boolean {
@@ -148,6 +184,8 @@ export function SearchSettingsPanel({
           </ul>
         </Field>
 
+        <MoreFilters draft={draft} onChange={edit} />
+
         {error && (
           <p className="field-error" role="alert">
             {error}
@@ -179,14 +217,124 @@ export function SearchSettingsPanel({
   );
 }
 
+function MoreFilters({
+  draft,
+  onChange,
+}: {
+  draft: SearchSettingsInput;
+  onChange: (change: Partial<SearchSettingsInput>) => void;
+}) {
+  const active = activeMoreFilters(draft);
+  const [open, setOpen] = useState(active > 0);
+
+  return (
+    <div className="more-filters">
+      <button
+        type="button"
+        className="more-filters-toggle"
+        aria-expanded={open}
+        aria-controls="more-filters-body"
+        onClick={() => setOpen(!open)}
+      >
+        <span>More filters</span>
+        {active > 0 && <span className="count count-small">{active} on</span>}
+        <ChevronIcon open={open} />
+      </button>
+      <div className="more-filters-body" id="more-filters-body" hidden={!open}>
+        <Field label="Excluded title keywords" hint="Drop jobs whose title contains any of these.">
+          <TermInput
+            label="Excluded keywords"
+            terms={draft.excluded_keywords}
+            placeholder="e.g. Manager, Principal"
+            onChange={(excluded_keywords) => onChange({ excluded_keywords })}
+          />
+        </Field>
+
+        <Field
+          label="Seniority"
+          htmlFor="seniority"
+          hint="Drops titles two or more levels above or below yours. Titles that don't state a level are kept."
+        >
+          <select
+            id="seniority"
+            className="text-input"
+            value={draft.seniority ?? ""}
+            onChange={(event) => onChange({ seniority: (event.target.value || null) as Seniority | null })}
+          >
+            <option value="">Any level</option>
+            {SENIORITIES.map((level) => (
+              <option key={level.id} value={level.id}>
+                {level.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        <Field
+          label="Years of experience"
+          htmlFor="years-experience"
+          hint="Drops postings asking for far more years than you have, or ranges far below it."
+        >
+          <input
+            id="years-experience"
+            className="text-input"
+            inputMode="numeric"
+            placeholder="Not set"
+            value={draft.years_experience ?? ""}
+            onChange={(event) => {
+              const years = parseWholeNumber(event.target.value);
+              onChange({ years_experience: years === null ? null : Math.min(years, 50) });
+            }}
+          />
+        </Field>
+
+        <Field
+          label="Minimum salary"
+          htmlFor="min-salary"
+          hint="Yearly, in USD. Only applies when a posting lists pay; postings without pay are kept."
+        >
+          <div className="affix-input">
+            <span aria-hidden="true">$</span>
+            <input
+              id="min-salary"
+              inputMode="numeric"
+              placeholder="Not set"
+              value={draft.min_salary === null ? "" : draft.min_salary.toLocaleString("en-US")}
+              onChange={(event) => {
+                const salary = parseWholeNumber(event.target.value);
+                onChange({ min_salary: salary === null ? null : Math.min(salary, 10_000_000) });
+              }}
+            />
+          </div>
+        </Field>
+
+        <div className="field">
+          <label className="switch-row switch-row-plain">
+            <span>I need visa sponsorship</span>
+            <input
+              type="checkbox"
+              className="switch"
+              checked={draft.needs_sponsorship}
+              onChange={(event) => onChange({ needs_sponsorship: event.target.checked })}
+            />
+          </label>
+          <p className="field-hint">Drops postings that say they can't sponsor a visa.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SettingsSummary({ settings }: { settings: SearchSettings }) {
   const modes = WORK_MODES.filter((m) => settings.work_modes.includes(m.id)).map((m) => m.label);
   const platforms = settings.available_platforms.filter((p) => settings.platforms.includes(p.id)).map((p) => p.name);
+  const more = activeMoreFilters(settings);
   const lines = [
     settings.roles.join(", "),
     [...settings.locations, ...modes].join(" · "),
     platforms.join(", "),
-  ].filter(Boolean);
+    more > 0 && `${more} more ${more === 1 ? "filter" : "filters"} on`,
+  ].filter((line): line is string => Boolean(line));
   return (
     <div className="panel-summary">
       {lines.map((line) => (
@@ -216,10 +364,26 @@ function ChevronIcon({ open }: { open: boolean }) {
   );
 }
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+function Field({
+  label,
+  hint,
+  htmlFor,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  htmlFor?: string;
+  children: ReactNode;
+}) {
   return (
     <div className="field">
-      <div className="field-label">{label}</div>
+      {htmlFor ? (
+        <label className="field-label" htmlFor={htmlFor}>
+          {label}
+        </label>
+      ) : (
+        <div className="field-label">{label}</div>
+      )}
       {children}
       {hint && <p className="field-hint">{hint}</p>}
     </div>

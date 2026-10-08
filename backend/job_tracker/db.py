@@ -40,6 +40,8 @@ CREATE TABLE IF NOT EXISTS jobs (
     first_seen_at TEXT NOT NULL,
     last_seen_at TEXT NOT NULL,
     closed INTEGER NOT NULL DEFAULT 0,
+    rejected_rule TEXT,
+    rejected_reason TEXT,
     UNIQUE (platform, external_id)
 );
 
@@ -59,6 +61,7 @@ CREATE TABLE IF NOT EXISTS runs (
     new_jobs INTEGER NOT NULL DEFAULT 0,
     updated_jobs INTEGER NOT NULL DEFAULT 0,
     closed_jobs INTEGER NOT NULL DEFAULT 0,
+    filtered_out TEXT NOT NULL DEFAULT '{}',
     errors TEXT NOT NULL DEFAULT '[]'
 );
 """

@@ -2,12 +2,21 @@ export type Platform = "greenhouse" | "lever" | "ashby";
 
 export type WorkMode = "remote" | "hybrid" | "onsite";
 
+export type Seniority = "intern" | "junior" | "mid" | "senior" | "staff" | "principal";
+
 export type SearchSettingsInput = {
   roles: string[];
   locations: string[];
   work_modes: WorkMode[];
   platforms: Platform[];
+  excluded_keywords: string[];
+  seniority: Seniority | null;
+  years_experience: number | null;
+  needs_sponsorship: boolean;
+  min_salary: number | null;
 };
+
+export type FilterRule = "role" | "excluded_keyword" | "location" | "seniority" | "experience" | "sponsorship" | "salary";
 
 export type SearchSettings = SearchSettingsInput & {
   available_platforms: { id: Platform; name: string; supported: boolean }[];
@@ -43,6 +52,8 @@ export type Job = {
   updated_at: string;
 };
 
+export type FilteredJob = Job & { rejection: { rule: FilterRule; reason: string } };
+
 export type RunStatus = "running" | "finished" | "failed" | "interrupted";
 
 export type RunError =
@@ -63,6 +74,7 @@ export type Run = {
   new_jobs: number;
   updated_jobs: number;
   closed_jobs: number;
+  filtered_out: Record<FilterRule, number>;
   errors: RunError[];
 };
 
@@ -129,6 +141,8 @@ export const setCompanyBlocked = (id: number, blocked: boolean) =>
   request<Company>(`/api/companies/${id}`, sendJson("PATCH", { blocked }));
 
 export const listJobs = () => request<Job[]>("/api/jobs");
+
+export const listFilteredOutJobs = () => request<FilteredJob[]>("/api/jobs/filtered-out");
 
 export const startRun = () => request<Run>("/api/runs", { method: "POST" });
 

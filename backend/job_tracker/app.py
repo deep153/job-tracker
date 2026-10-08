@@ -11,8 +11,10 @@ from pydantic import BaseModel, Field, field_validator
 from job_tracker.companies import ALL_PLATFORMS, PLATFORM_NAMES, Platform
 from job_tracker.db import Database
 from job_tracker.discovery import BraveSearch, supported_for_discovery
+from job_tracker.filtering import refilter_jobs
+from job_tracker.filters import RULES
 from job_tracker.runs import RunAlreadyActive, RunService, SearchSettingsIncomplete
-from job_tracker.search_settings import SearchSettings, SettingsStore, WorkMode
+from job_tracker.search_settings import SearchSettings, Seniority, SettingsStore, WorkMode
 from job_tracker.sources import job_board_sources
 
 MAX_SETTING_ITEMS = 20
@@ -24,8 +26,13 @@ class SearchSettingsIn(BaseModel):
     locations: list[str] = Field(max_length=MAX_SETTING_ITEMS)
     work_modes: list[WorkMode]
     platforms: list[Platform]
+    excluded_keywords: list[str] = Field(default_factory=list, max_length=MAX_SETTING_ITEMS)
+    seniority: Seniority | None = None
+    years_experience: int | None = Field(default=None, ge=0, le=50)
+    needs_sponsorship: bool = False
+    min_salary: int | None = Field(default=None, ge=0, le=10_000_000)
 
-    @field_validator("roles", "locations")
+    @field_validator("roles", "locations", "excluded_keywords")
     @classmethod
     def _clean_terms(cls, values: list[str]) -> list[str]:
         cleaned: list[str] = []
@@ -71,6 +78,11 @@ def create_app(db_path: Path, http: httpx.Client) -> FastAPI:
             "locations": current.locations,
             "work_modes": current.work_modes,
             "platforms": current.platforms,
+            "excluded_keywords": current.excluded_keywords,
+            "seniority": current.seniority,
+            "years_experience": current.years_experience,
+            "needs_sponsorship": current.needs_sponsorship,
+            "min_salary": current.min_salary,
             "available_platforms": [
                 {"id": p, "name": PLATFORM_NAMES[p], "supported": platform_supported(p)} for p in ALL_PLATFORMS
             ],
@@ -88,7 +100,9 @@ def create_app(db_path: Path, http: httpx.Client) -> FastAPI:
         unsupported = [PLATFORM_NAMES[p] for p in body.platforms if not platform_supported(p)]
         if unsupported:
             raise HTTPException(status_code=422, detail=f"{', '.join(unsupported)} isn't supported yet.")
-        settings.save_search(SearchSettings(body.roles, body.locations, body.work_modes, body.platforms))
+        settings.save_search(SearchSettings(**body.model_dump()))
+        with db.connect() as conn:
+            refilter_jobs(conn)
         return search_settings_json()
 
     @app.put("/api/settings/search-api-key", status_code=204)
@@ -154,11 +168,27 @@ def create_app(db_path: Path, http: httpx.Client) -> FastAPI:
                 """
                 SELECT jobs.* FROM jobs
                 JOIN companies ON companies.platform = jobs.platform AND companies.board_id = jobs.board_id
-                WHERE jobs.closed = 0 AND companies.blocked = 0
+                WHERE jobs.closed = 0 AND companies.blocked = 0 AND jobs.rejected_rule IS NULL
                 ORDER BY jobs.updated_at DESC
                 """
             ).fetchall()
             return [_job_json(row) for row in rows]
+
+    @app.get("/api/jobs/filtered-out")
+    def list_filtered_out_jobs() -> list[dict[str, Any]]:
+        with db.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT jobs.* FROM jobs
+                JOIN companies ON companies.platform = jobs.platform AND companies.board_id = jobs.board_id
+                WHERE jobs.closed = 0 AND companies.blocked = 0 AND jobs.rejected_rule IS NOT NULL
+                ORDER BY jobs.updated_at DESC
+                """
+            ).fetchall()
+            return [
+                {**_job_json(row), "rejection": {"rule": row["rejected_rule"], "reason": row["rejected_reason"]}}
+                for row in rows
+            ]
 
     return app
 
@@ -178,6 +208,7 @@ def _run_json(row: sqlite3.Row) -> dict[str, Any]:
         "new_jobs": row["new_jobs"],
         "updated_jobs": row["updated_jobs"],
         "closed_jobs": row["closed_jobs"],
+        "filtered_out": {rule: 0 for rule in RULES} | json.loads(row["filtered_out"]),
         "errors": json.loads(row["errors"]),
     }
 

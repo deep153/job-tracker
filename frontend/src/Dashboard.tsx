@@ -4,16 +4,19 @@ import {
   getRun,
   getSearchSettings,
   listCompanies,
+  listFilteredOutJobs,
   listJobs,
   listRuns,
   startRun,
   type Company,
+  type FilterRule,
+  type FilteredJob,
   type Job,
   type Run,
   type SearchSettings,
 } from "./api";
 import { CompaniesPanel } from "./CompaniesPanel";
-import { PLATFORM_LABELS, companyName, fullDate, timeAgo } from "./format";
+import { FILTER_LABELS, PLATFORM_LABELS, companyName, fullDate, timeAgo, totalFilteredOut } from "./format";
 import { AlertIcon, BriefcaseIcon, CheckIcon, ExternalIcon, PinIcon, PlayIcon, SlidersIcon } from "./icons";
 import { SearchSettingsPanel } from "./SearchSettingsPanel";
 
@@ -21,8 +24,12 @@ const POLL_INTERVAL_MS = 700;
 
 type Failure = { message: string; retry: () => void };
 
+type View = "matches" | "filtered";
+
 export function Dashboard() {
   const [jobs, setJobs] = useState<Job[] | null>(null);
+  const [filtered, setFiltered] = useState<FilteredJob[] | null>(null);
+  const [view, setView] = useState<View>("matches");
   const [run, setRun] = useState<Run | null>(null);
   const [settings, setSettings] = useState<SearchSettings | null>(null);
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -30,6 +37,7 @@ export function Dashboard() {
   const [failure, setFailure] = useState<Failure | null>(null);
   const running = starting || run?.status === "running";
   const ready = settings?.ready ?? false;
+  const showTabs = jobs !== null && filtered !== null && (jobs.length > 0 || filtered.length > 0);
 
   async function load<T>(fetch: () => Promise<T>, apply: (value: T) => void) {
     try {
@@ -39,7 +47,7 @@ export function Dashboard() {
     }
   }
 
-  const loadJobs = () => load(listJobs, setJobs);
+  const loadJobs = () => Promise.all([load(listJobs, setJobs), load(listFilteredOutJobs, setFiltered)]);
   const loadCompanies = () => load(listCompanies, setCompanies);
 
   async function loadAll() {
@@ -115,7 +123,14 @@ export function Dashboard() {
       <div className="layout">
         <aside className="sidebar">
           {settings ? (
-            <SearchSettingsPanel settings={settings} disabled={running} onChange={setSettings} />
+            <SearchSettingsPanel
+              settings={settings}
+              disabled={running}
+              onChange={(next) => {
+                setSettings(next);
+                void loadJobs();
+              }}
+            />
           ) : (
             !failure && <PanelSkeleton />
           )}
@@ -126,10 +141,10 @@ export function Dashboard() {
           <div className="page-heading">
             <div className="page-title">
               <h1>Jobs</h1>
-              {jobs && jobs.length > 0 && <span className="count">{plural(jobs.length, "job")}</span>}
             </div>
             <p className="subtitle">
-              Open postings from companies found with your search settings. Nothing is fetched until you click Run.
+              Open postings from companies found with your search settings that pass your filters. Nothing is fetched
+              until you click Run.
             </p>
           </div>
 
@@ -138,15 +153,37 @@ export function Dashboard() {
           )}
           {settings && !settings.ready && !running && <SetupNotice missing={settings.missing} />}
           {run?.status === "running" && <RunProgress run={run} />}
-          {run && run.status !== "running" && <RunSummary run={run} />}
+          {run && run.status !== "running" && <RunSummary run={run} onReview={() => setView("filtered")} />}
 
-          {jobs === null ? (
-            !failure && <JobListSkeleton />
-          ) : jobs.length === 0 ? (
-            <EmptyState running={running} ready={ready} hasRun={run !== null} onRun={startRunAndFollow} />
-          ) : (
-            <JobList jobs={jobs} />
+          {showTabs && jobs && filtered && (
+            <ViewTabs view={view} matches={jobs.length} filteredOut={filtered.length} onChange={setView} />
           )}
+          <div
+            role={showTabs ? "tabpanel" : undefined}
+            id="jobs-panel"
+            aria-labelledby={showTabs ? `tab-${view}` : undefined}
+          >
+            {jobs === null || filtered === null ? (
+              !failure && <JobListSkeleton />
+            ) : view === "filtered" ? (
+              filtered.length === 0 ? (
+                <FilteredEmptyState />
+              ) : (
+                <JobList jobs={filtered} />
+              )
+            ) : jobs.length === 0 ? (
+              <EmptyState
+                running={running}
+                ready={ready}
+                hasRun={run !== null}
+                filteredOut={filtered.length}
+                onRun={startRunAndFollow}
+                onReview={() => setView("filtered")}
+              />
+            ) : (
+              <JobList jobs={jobs} />
+            )}
+          </div>
         </main>
       </div>
     </div>
@@ -170,6 +207,19 @@ function RunButton({ running, ready, onClick }: { running: boolean; ready: boole
 
 function plural(count: number, singular: string, pluralForm = `${singular}s`): string {
   return `${count} ${count === 1 ? singular : pluralForm}`;
+}
+
+function formatSalary(salary: NonNullable<Job["salary"]>): string {
+  const money = (n: number) =>
+    new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: salary.currency ?? "USD",
+      notation: "compact",
+      maximumFractionDigits: 0,
+    }).format(n);
+  const { min, max } = salary;
+  if (min !== null && max !== null && min !== max) return `${money(min)}–${money(max)}`;
+  return money((max ?? min) as number);
 }
 
 function SetupNotice({ missing }: { missing: string[] }) {
@@ -210,6 +260,7 @@ function RunProgress({ run }: { run: Run }) {
         <span className="notice-text">
           Fetching boards: {run.companies_fetched} of {plural(run.companies_total, "company", "companies")}
           {run.new_jobs > 0 && ` · ${plural(run.new_jobs, "new job")} so far`}
+          {totalFilteredOut(run.filtered_out) > 0 && ` · ${totalFilteredOut(run.filtered_out)} filtered out`}
         </span>
       </div>
       <div
@@ -225,7 +276,7 @@ function RunProgress({ run }: { run: Run }) {
   );
 }
 
-function RunSummary({ run }: { run: Run }) {
+function RunSummary({ run, onReview }: { run: Run; onReview: () => void }) {
   const finished = run.finished_at ?? run.started_at;
   const when = (
     <time dateTime={finished} title={fullDate(finished)}>
@@ -256,6 +307,8 @@ function RunSummary({ run }: { run: Run }) {
     run.updated_jobs > 0 && `${run.updated_jobs} updated`,
     run.closed_jobs > 0 && `${run.closed_jobs} closed`,
   ].filter(Boolean);
+  const filteredOut = totalFilteredOut(run.filtered_out);
+  const byRule = (Object.entries(run.filtered_out) as [FilterRule, number][]).filter(([, count]) => count > 0);
 
   return (
     <>
@@ -265,6 +318,23 @@ function RunSummary({ run }: { run: Run }) {
           Run finished {when} · {changes.join(" · ")}
         </span>
       </div>
+      {filteredOut > 0 && (
+        <div className="notice notice-muted filter-summary" role="status">
+          <span className="notice-text">
+            <strong>{filteredOut} filtered out</strong> of the new and changed jobs:
+            <span className="filter-counts">
+              {byRule.map(([rule, count]) => (
+                <span className="badge" key={rule}>
+                  {FILTER_LABELS[rule]} <strong>{count}</strong>
+                </span>
+              ))}
+            </span>
+          </span>
+          <button type="button" className="button button-ghost" onClick={onReview}>
+            Review
+          </button>
+        </div>
+      )}
       {searchErrors.map((error) => (
         <div className="notice notice-warning" role="status" key={error.message}>
           <AlertIcon />
@@ -326,16 +396,68 @@ function ErrorBanner({
   );
 }
 
+function ViewTabs({
+  view,
+  matches,
+  filteredOut,
+  onChange,
+}: {
+  view: View;
+  matches: number;
+  filteredOut: number;
+  onChange: (view: View) => void;
+}) {
+  const tabs: { id: View; label: string; count: number }[] = [
+    { id: "matches", label: "Matches", count: matches },
+    { id: "filtered", label: "Filtered out", count: filteredOut },
+  ];
+  return (
+    <div className="view-tabs" role="tablist" aria-label="Jobs">
+      {tabs.map((tab) => (
+        <button
+          key={tab.id}
+          type="button"
+          role="tab"
+          id={`tab-${tab.id}`}
+          aria-selected={view === tab.id}
+          aria-controls="jobs-panel"
+          className="view-tab"
+          onClick={() => onChange(tab.id)}
+        >
+          {tab.label}
+          <span className="view-tab-count">{tab.count}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function FilteredEmptyState() {
+  return (
+    <section className="empty">
+      <div className="empty-icon" aria-hidden="true">
+        <SlidersIcon size={28} />
+      </div>
+      <h2>Nothing filtered out</h2>
+      <p>Jobs that don't fit your search settings or filters show up here, each with the reason it was dropped.</p>
+    </section>
+  );
+}
+
 function EmptyState({
   running,
   ready,
   hasRun,
+  filteredOut,
   onRun,
+  onReview,
 }: {
   running: boolean;
   ready: boolean;
   hasRun: boolean;
+  filteredOut: number;
   onRun: () => void;
+  onReview: () => void;
 }) {
   if (!ready) {
     return (
@@ -348,6 +470,23 @@ function EmptyState({
           Add the roles and locations you want, pick your job boards, and add a search API key. Job Tracker then finds
           matching companies and their open jobs for you.
         </p>
+      </section>
+    );
+  }
+  if (filteredOut > 0) {
+    return (
+      <section className="empty">
+        <div className="empty-icon" aria-hidden="true">
+          <SlidersIcon size={28} />
+        </div>
+        <h2>No jobs pass your filters</h2>
+        <p>
+          {plural(filteredOut, "open job was", "open jobs were")} filtered out. Review them to see whether a filter is
+          too strict.
+        </p>
+        <button className="button button-secondary" onClick={onReview}>
+          Review filtered jobs
+        </button>
       </section>
     );
   }
@@ -376,7 +515,7 @@ function EmptyState({
   );
 }
 
-function JobList({ jobs }: { jobs: Job[] }) {
+function JobList({ jobs }: { jobs: (Job | FilteredJob)[] }) {
   return (
     <ul className="job-list">
       {jobs.map((job) => (
@@ -386,17 +525,25 @@ function JobList({ jobs }: { jobs: Job[] }) {
   );
 }
 
-function JobRow({ job }: { job: Job }) {
+function JobRow({ job }: { job: Job | FilteredJob }) {
   const location = job.locations.join(" · ");
+  const rejection = "rejection" in job ? job.rejection : null;
   return (
-    <li className="job">
+    <li className={`job${rejection ? " is-filtered" : ""}`}>
       <div className="job-main">
         <h3 className="job-title">{job.title}</h3>
         <div className="job-meta">
           <span className="job-company">{companyName(job.company)}</span>
           <span className="dot" aria-hidden="true" />
           <span className="badge">{PLATFORM_LABELS[job.platform]}</span>
+          {job.salary && <span className="badge badge-green">{formatSalary(job.salary)}</span>}
         </div>
+        {rejection && (
+          <p className="job-rejection">
+            <span className="badge badge-warning">{FILTER_LABELS[rejection.rule]}</span>
+            {rejection.reason}
+          </p>
+        )}
       </div>
       <div className="job-location">
         <PinIcon />

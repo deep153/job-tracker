@@ -1,10 +1,10 @@
 import hashlib
 import json
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from job_tracker.companies import Platform
-from job_tracker.postings import Posting
+from job_tracker.postings import Posting, SalaryRange
 
 
 @dataclass
@@ -12,6 +12,8 @@ class SyncResult:
     new: int = 0
     updated: int = 0
     closed: int = 0
+    # New, changed and reopened jobs: the ones whose filter verdict may have changed.
+    to_filter: list[int] = field(default_factory=list)
 
 
 def content_hash(posting: Posting) -> str:
@@ -40,11 +42,15 @@ def sync_board(
             if existing is not None and existing["id"] in seen:
                 continue  # the same job listed twice on this board
         if existing is None:
-            seen.add(_insert(conn, posting, digest, seen_at))
+            job_id = _insert(conn, posting, digest, seen_at)
+            seen.add(job_id)
             result.new += 1
+            result.to_filter.append(job_id)
             continue
         if existing["content_hash"] != digest:
             result.updated += 1
+        if existing["content_hash"] != digest or existing["closed"]:
+            result.to_filter.append(existing["id"])
         _update(conn, existing["id"], posting, digest, seen_at)
         seen.add(existing["id"])
 
@@ -71,6 +77,26 @@ def _fields(posting: Posting) -> tuple[object, ...]:
         posting.posting_url,
         posting.application_url,
         posting.updated_at,
+    )
+
+
+def stored_posting(row: sqlite3.Row) -> Posting:
+    """The posting a `jobs` row was stored from."""
+    salary = None
+    if row["salary_min"] is not None or row["salary_max"] is not None:
+        salary = SalaryRange(row["salary_min"], row["salary_max"], row["salary_currency"])
+    return Posting(
+        platform=row["platform"],
+        board_id=row["board_id"],
+        external_id=row["external_id"],
+        title=row["title"],
+        locations=json.loads(row["locations"]),
+        remote=None if row["remote"] is None else bool(row["remote"]),
+        salary=salary,
+        description=row["description"],
+        posting_url=row["posting_url"],
+        application_url=row["application_url"],
+        updated_at=row["updated_at"],
     )
 
 

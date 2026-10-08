@@ -1,4 +1,5 @@
 import json
+import sqlite3
 from dataclasses import asdict, dataclass, field
 from typing import Literal
 
@@ -6,16 +7,22 @@ from job_tracker.companies import Platform
 from job_tracker.db import Database
 
 WorkMode = Literal["remote", "hybrid", "onsite"]
+Seniority = Literal["intern", "junior", "mid", "senior", "staff", "principal"]
 
 
 @dataclass(frozen=True)
 class SearchSettings:
-    """What I'm looking for: drives company discovery and (later) the hard filters."""
+    """What I'm looking for: drives company discovery and the hard filters."""
 
     roles: list[str] = field(default_factory=list)
     locations: list[str] = field(default_factory=list)
     work_modes: list[WorkMode] = field(default_factory=list)
     platforms: list[Platform] = field(default_factory=list)
+    excluded_keywords: list[str] = field(default_factory=list)
+    seniority: Seniority | None = None
+    years_experience: int | None = None
+    needs_sponsorship: bool = False
+    min_salary: int | None = None
 
     def missing(self, has_search_key: bool) -> list[str]:
         """Human-readable list of what still has to be set before a run can start."""
@@ -31,6 +38,12 @@ class SearchSettings:
         return missing
 
 
+def read_search(conn: sqlite3.Connection) -> SearchSettings:
+    """The saved search settings, read inside the caller's transaction."""
+    row = conn.execute("SELECT value FROM settings WHERE key = 'search'").fetchone()
+    return SearchSettings(**json.loads(row["value"])) if row else SearchSettings()
+
+
 class SettingsStore:
     """Single-user settings and secrets, kept in the local database only."""
 
@@ -38,8 +51,8 @@ class SettingsStore:
         self._db = db
 
     def search(self) -> SearchSettings:
-        raw = self._get("search")
-        return SearchSettings(**json.loads(raw)) if raw else SearchSettings()
+        with self._db.connect() as conn:
+            return read_search(conn)
 
     def save_search(self, settings: SearchSettings) -> None:
         self._set("search", json.dumps(asdict(settings)))

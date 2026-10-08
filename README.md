@@ -31,6 +31,11 @@ Each run searches the web for company job boards matching every role and locatio
 run), remembers the companies it finds, and fetches open postings from all of them. Block a company in the
 **Companies** panel to stop fetching it and hide its jobs.
 
+Jobs that don't fit are filtered out before anything else happens to them: titles must match a role, the
+location and work mode must match yours, and the optional **More filters** (excluded title keywords,
+seniority, years of experience, visa sponsorship, minimum salary) drop the rest. The **Filtered out** tab
+lists every dropped job with the reason, and changing settings re-filters stored jobs without fetching again.
+
 ## Checks
 
 ```sh

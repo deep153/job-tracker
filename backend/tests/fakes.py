@@ -1,5 +1,9 @@
+import html
+import itertools
+import json
 import threading
 from pathlib import Path
+from typing import Any
 
 import httpx
 
@@ -23,6 +27,22 @@ def greenhouse_job_url(board_id: str, job_id: int = 4000000001) -> str:
     return f"https://job-boards.greenhouse.io/{board_id}/jobs/{job_id}"
 
 
+_next_job_id = itertools.count(4100000001)
+
+
+def greenhouse_job(board_id: str, title: str, location: str, content: str = "<p>Join our team.</p>") -> dict[str, Any]:
+    """One job in the shape the Greenhouse job board API returns it (`content` is plain HTML here)."""
+    job_id = next(_next_job_id)
+    return {
+        "absolute_url": greenhouse_job_url(board_id, job_id),
+        "id": job_id,
+        "location": {"name": location},
+        "updated_at": "2026-10-01T09:00:00-04:00",
+        "title": title,
+        "content": html.escape(content),
+    }
+
+
 class FakeJobBoards:
     """Serves recorded job-board fixtures and scripted web search results instead of the network.
 
@@ -32,6 +52,7 @@ class FakeJobBoards:
 
     def __init__(self) -> None:
         self._fixtures: dict[tuple[str, str], str] = {}
+        self._inline: dict[tuple[str, str], bytes] = {}
         self._failures: dict[tuple[str, str], int] = {}
         self._holds: dict[tuple[str, str], threading.Event] = {}
         self._search_results: list[str] = []
@@ -43,6 +64,10 @@ class FakeJobBoards:
     def serve(self, platform: str, board_id: str, fixture: str) -> None:
         """Serve `fixtures/<platform>/<fixture>.json` for this board from now on."""
         self._fixtures[(platform, board_id)] = fixture
+
+    def serve_jobs(self, board_id: str, jobs: list[dict[str, Any]]) -> None:
+        """Serve these Greenhouse jobs (see `greenhouse_job`) for this board from now on."""
+        self._inline[("greenhouse", board_id)] = json.dumps({"jobs": jobs, "meta": {"total": len(jobs)}}).encode()
 
     def fail(self, platform: str, board_id: str, status: int = 500) -> None:
         self._failures[(platform, board_id)] = status
@@ -78,6 +103,8 @@ class FakeJobBoards:
             self._holds[key].wait(timeout=10)
         if key in self._failures:
             return httpx.Response(self._failures[key], text="board unavailable")
+        if key in self._inline:
+            return httpx.Response(200, content=self._inline[key], headers={"content-type": "application/json"})
         fixture = FIXTURES / platform / f"{self._fixtures.get(key, board_id)}.json"
         if not fixture.exists():
             return httpx.Response(404, json={"status": 404, "error": "Job board not found"})
