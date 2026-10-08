@@ -1000,6 +1000,11 @@ select.text-input {
   border-top: 1px solid var(--border);
 }
 
+.api-key:first-child {
+  padding-top: 0;
+  border-top: none;
+}
+
 .api-key-form {
   display: flex;
   flex-wrap: wrap;

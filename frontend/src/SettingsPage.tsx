@@ -138,7 +138,10 @@ function ModelsForm({ settings, onSaved }: { settings: AiSettings; onSaved: (set
           list="suggested-models"
           spellCheck={false}
           value={scoring}
-          onChange={(event) => setScoring(event.target.value)}
+          onChange={(event) => {
+            setScoring(event.target.value);
+            setError(null);
+          }}
         />
       </Field>
       <Field
@@ -152,7 +155,10 @@ function ModelsForm({ settings, onSaved }: { settings: AiSettings; onSaved: (set
           list="suggested-models"
           spellCheck={false}
           value={tailoring}
-          onChange={(event) => setTailoring(event.target.value)}
+          onChange={(event) => {
+            setTailoring(event.target.value);
+            setError(null);
+          }}
         />
       </Field>
       {error && (
