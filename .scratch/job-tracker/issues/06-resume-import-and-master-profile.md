@@ -6,16 +6,16 @@ The app checks at startup that LibreOffice is installed and shows a clear messag
 
 **Blocked by:** 01 (Walking skeleton)
 
-**Status:** ready-for-agent
+**Status:** done (ec83762)
 
-- [ ] Uploading a .docx stores the original file and returns its paragraphs with style info
-- [ ] I can save a mapping of Summary paragraph(s) and Skills paragraph(s)
-- [ ] The master skills list is pre-filled from the mapped Skills section and is editable
-- [ ] A preview PDF is generated via LibreOffice and its page count is stored
-- [ ] Uploading a non-.docx or corrupt file is rejected with a clear message
-- [ ] Saving a mapping without a Summary or without a Skills section is rejected with a clear message
-- [ ] Replacing the master creates a new resume version; earlier versions are kept
-- [ ] Missing LibreOffice is detected at startup and reported clearly in the UI
-- [ ] Tests use real python-docx and real LibreOffice conversion
-- [ ] Test: importing a sample resume, mapping it, and fetching the preview yields a PDF whose text matches the resume and whose page count is recorded
-- [ ] Test: invalid file and incomplete mapping are each rejected
+- [x] Uploading a .docx stores the original file and returns its paragraphs with style info
+- [x] I can save a mapping of Summary paragraph(s) and Skills paragraph(s)
+- [x] The master skills list is pre-filled from the mapped Skills section and is editable
+- [x] A preview PDF is generated via LibreOffice and its page count is stored
+- [x] Uploading a non-.docx or corrupt file is rejected with a clear message
+- [x] Saving a mapping without a Summary or without a Skills section is rejected with a clear message
+- [x] Replacing the master creates a new resume version; earlier versions are kept
+- [x] Missing LibreOffice is detected at startup and reported clearly in the UI
+- [x] Tests use real python-docx and real LibreOffice conversion
+- [x] Test: importing a sample resume, mapping it, and fetching the preview yields a PDF whose text matches the resume and whose page count is recorded
+- [x] Test: invalid file and incomplete mapping are each rejected
