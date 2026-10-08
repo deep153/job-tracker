@@ -497,7 +497,7 @@ function Preview({ resume }: { resume: Resume }) {
           <span className="visually-hidden">(opens in a new tab)</span>
         </a>
       </div>
-      <iframe className="resume-preview" src={`${resume.preview_url}#view=FitH`} title="PDF preview of your resume" />
+      <iframe className="resume-preview" src={`${resume.preview_url}#view=FitH&navpanes=0`} title="PDF preview of your resume" />
     </section>
   );
 }
