@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { getStatus, type SystemStatus } from "./api";
+import { getStatus } from "../api/status";
+import type { SystemStatus } from "../types/status";
 import { AlertIcon } from "./icons";
 
 export type Page = "jobs" | "resume" | "settings";
