@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { Dashboard } from "./Dashboard";
-import { ResumePage } from "./ResumePage";
-import { SettingsPage } from "./SettingsPage";
-import type { Page } from "./Topbar";
+import type { Page } from "./components/Topbar";
+import { Dashboard } from "./pages/Dashboard";
+import { ResumePage } from "./pages/ResumePage";
+import { SettingsPage } from "./pages/SettingsPage";
 
 function pageFromHash(): Page {
   if (window.location.hash === "#/resume") return "resume";
