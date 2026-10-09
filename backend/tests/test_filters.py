@@ -103,9 +103,7 @@ def test_hybrid_and_onsite_postings_pass_only_when_chosen(client: TestClient, bo
 
     run_with(client, boards, postings, locations=[NYC], work_modes=["remote", "hybrid"])
     assert shown(client) == ["Backend Engineer"]
-    assert rejections(client) == {
-        "Backend Engineer II": ("location", "On-site role, and you haven't chosen on-site.")
-    }
+    assert rejections(client) == {"Backend Engineer II": ("location", "On-site role, and you haven't chosen on-site.")}
 
     client.put("/api/search-settings", json={**READY_SETTINGS, "locations": [NYC], "work_modes": ["onsite"]})
     assert shown(client) == ["Backend Engineer II"]
@@ -130,9 +128,7 @@ def test_titles_far_above_or_below_my_seniority_are_dropped(client: TestClient, 
     assert run["filtered_out"]["seniority"] == 2
 
 
-def test_postings_asking_for_far_more_or_far_fewer_years_are_dropped(
-    client: TestClient, boards: FakeJobBoards
-) -> None:
+def test_postings_asking_for_far_more_or_far_fewer_years_are_dropped(client: TestClient, boards: FakeJobBoards) -> None:
     postings = [
         job("Backend Engineer, Payments", content="<ul><li>4+ years of Python</li></ul>"),
         job("Backend Engineer, Search", content="<p>At least 8 years of software engineering experience.</p>"),

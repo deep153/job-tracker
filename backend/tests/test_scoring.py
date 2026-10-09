@@ -5,7 +5,8 @@ import httpx2
 import pytest
 from fastapi.testclient import TestClient
 
-from job_tracker.llm import ClaudeLLM, LLMError, estimate_cost
+from job_tracker.clients.claude import ClaudeLLM, LLMError
+from job_tracker.services.pricing import estimate_cost
 from tests.conftest import ANTHROPIC_KEY, READY_SETTINGS, SEARCH_KEY, discover_boards, run_to_completion
 from tests.fakes import FakeJobBoards, FakeLLM, greenhouse_job
 from tests.resumes import SKILL_LINES, SUMMARY, add_ready_resume, mapping_for, sample_resume, upload
@@ -41,7 +42,9 @@ def test_dashboard_shows_only_jobs_at_or_above_the_threshold_sorted_by_score(
     llm.score("Mobile Engineer", 40)
 
     run = run_with(
-        client, boards, [job("Data Engineer"), job("Platform Engineer"), job("Mobile Engineer"), job("Backend Engineer")]
+        client,
+        boards,
+        [job("Data Engineer"), job("Platform Engineer"), job("Mobile Engineer"), job("Backend Engineer")],
     )
 
     assert matches(client) == [("Backend Engineer", 92), ("Platform Engineer", 70)]
@@ -298,7 +301,12 @@ def test_the_prompt_has_my_resume_preferences_and_the_job(
         assert expected in call.prompt
     for expected in ["My level: senior", "Years of experience: 6", "I need visa sponsorship: yes"]:
         assert expected in call.prompt
-    for expected in ["Title: Backend Engineer", f"Company: {BOARD}", "You'll build ledgers in Go.", "150,000 - 190,000"]:
+    for expected in [
+        "Title: Backend Engineer",
+        f"Company: {BOARD}",
+        "You'll build ledgers in Go.",
+        "150,000 - 190,000",
+    ]:
         assert expected in call.prompt
 
 
@@ -351,7 +359,12 @@ def test_claude_is_asked_for_structured_output_and_its_answer_parsed() -> None:
     ("status", "error", "message", "fatal"),
     [
         (401, "authentication_error", "Claude rejected your Anthropic API key. Check it in Settings.", True),
-        (404, "not_found_error", "Claude has no model called “claude-haiku-5-5”. Check the model names in Settings.", True),
+        (
+            404,
+            "not_found_error",
+            "Claude has no model called “claude-haiku-5-5”. Check the model names in Settings.",
+            True,
+        ),
         (400, "invalid_request_error", "Your Anthropic account is out of credit.", True),
     ],
 )

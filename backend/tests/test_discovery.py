@@ -1,8 +1,8 @@
 from fastapi.testclient import TestClient
 
-from job_tracker.discovery import MAX_SEARCH_QUERIES_PER_RUN
+from job_tracker.services.discovery import MAX_SEARCH_QUERIES_PER_RUN
 from tests.conftest import READY_SETTINGS, SEARCH_KEY, configure_search, discover_boards, run_to_completion
-from tests.fakes import FakeJobBoards, greenhouse_job_url
+from tests.fakes import FakeJobBoards
 
 GREENHOUSE_SITES = "(site:job-boards.greenhouse.io OR site:boards.greenhouse.io)"
 
