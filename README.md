@@ -57,9 +57,31 @@ section; edit it so it holds every skill you have, because tailoring can only us
 newer resume creates a new version (earlier versions are kept) that you mark the same way. Resume files are
 stored next to the database, in `~/.job-tracker/files/`.
 
+## Code layout
+
+Backend (`backend/job_tracker/`). A request flows routes → services → repositories / clients:
+
+| Folder          | What goes there                                                                                  |
+| --------------- | ------------------------------------------------------------------------------------------------ |
+| `routes/`       | FastAPI routers (controllers): validate the request, call one service, serialize the result.     |
+| `validators/`   | Pydantic request bodies and their validation rules.                                              |
+| `services/`     | Business logic. Raise the errors in `services/errors.py`, which routes turn into HTTP statuses.  |
+| `clients/`      | Calls to outside APIs and programs: job boards, Brave Search, Claude, LibreOffice.               |
+| `repositories/` | All SQL. `Database.transaction()` gives a unit of work whose repositories share one transaction. |
+| `models/`       | Plain dataclasses passed between the layers.                                                     |
+| `serializers/`  | Models to the JSON the API sends.                                                                |
+| `utils/`        | Small helpers with no app knowledge (timestamps, HTML to text, salary parsing).                  |
+
+`container.py` builds every client and service once; `app.py` wires them into FastAPI. Tests live in
+`backend/tests/`: `api/` drives the app over HTTP, `unit/` mirrors the package layout, and `support/` holds the
+fakes and helpers.
+
+Frontend (`frontend/src/`): `api/` has one module per backend resource on a shared fetch client, `types/` the
+API's shapes, `pages/` the three pages, `components/` everything they share, and `utils/` formatting helpers.
+
 ## Checks
 
 ```sh
-cd backend && .venv/bin/pytest && .venv/bin/mypy
+cd backend && .venv/bin/pytest && .venv/bin/mypy && .venv/bin/ruff check && .venv/bin/ruff format --check
 cd frontend && npm run typecheck
 ```
