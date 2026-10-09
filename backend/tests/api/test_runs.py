@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
-from tests.conftest import discover_boards, run_to_completion, wait_for_run
-from tests.fakes import FakeJobBoards
+from tests.support.api import discover_boards, run_to_completion, wait_for_run
+from tests.support.fake_job_boards import FakeJobBoards
 
 
 def test_run_fetches_greenhouse_postings_into_jobs_list(client: TestClient, boards: FakeJobBoards) -> None:

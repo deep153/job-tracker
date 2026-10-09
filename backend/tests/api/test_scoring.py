@@ -1,15 +1,14 @@
-import json
 from typing import Any
 
-import httpx2
 import pytest
 from fastapi.testclient import TestClient
 
-from job_tracker.clients.claude import ClaudeLLM, LLMError
+from job_tracker.clients.claude import LLMError
 from job_tracker.services.pricing import estimate_cost
-from tests.conftest import ANTHROPIC_KEY, READY_SETTINGS, SEARCH_KEY, discover_boards, run_to_completion
-from tests.fakes import FakeJobBoards, FakeLLM, greenhouse_job
-from tests.resumes import SKILL_LINES, SUMMARY, add_ready_resume, mapping_for, sample_resume, upload
+from tests.support.api import ANTHROPIC_KEY, READY_SETTINGS, SEARCH_KEY, discover_boards, run_to_completion
+from tests.support.fake_job_boards import FakeJobBoards, greenhouse_job
+from tests.support.fake_llm import FakeLLM
+from tests.support.resumes import SKILL_LINES, SUMMARY, add_ready_resume, mapping_for, sample_resume, upload
 
 BOARD = "globex"
 NYC = "New York, NY"
@@ -210,13 +209,6 @@ def test_each_run_records_its_estimated_ai_cost_and_settings_sum_them_up(
     assert [(r["id"], r["scored_jobs"]) for r in costs["recent_runs"]] == [(second["id"], 1), (first["id"], 2)]
 
 
-def test_prices_follow_the_model() -> None:
-    assert estimate_cost("claude-sonnet-5-5", 1_000_000, 1_000_000) == pytest.approx(12)
-    assert estimate_cost("claude-haiku-4-5-20251001", 1_000_000, 0) == pytest.approx(1)
-    assert estimate_cost("claude-haiku-5-5", 200_000, 0) == pytest.approx(0.10)  # long prompts cost more
-    assert estimate_cost("claude-opus-9", 1_000_000, 0) == pytest.approx(4)  # unknown: priced as its line
-
-
 def test_a_fatal_llm_error_stops_scoring_and_the_next_run_catches_up(
     client: TestClient, boards: FakeJobBoards, llm: FakeLLM
 ) -> None:
@@ -308,71 +300,3 @@ def test_the_prompt_has_my_resume_preferences_and_the_job(
         "150,000 - 190,000",
     ]:
         assert expected in call.prompt
-
-
-def claude(handler: Any) -> ClaudeLLM:
-    return ClaudeLLM(http_client=httpx2.Client(transport=httpx2.MockTransport(handler)))
-
-
-def generate(llm: ClaudeLLM) -> Any:
-    return llm.generate(
-        api_key=ANTHROPIC_KEY,
-        model="claude-haiku-5-5",
-        system="Be brief.",
-        prompt="Score this.",
-        schema={"type": "object"},
-        max_tokens=100,
-    )
-
-
-def test_claude_is_asked_for_structured_output_and_its_answer_parsed() -> None:
-    requests: list[httpx2.Request] = []
-
-    def handler(request: httpx2.Request) -> httpx2.Response:
-        requests.append(request)
-        return httpx2.Response(
-            200,
-            json={
-                "id": "msg_1",
-                "type": "message",
-                "role": "assistant",
-                "model": "claude-haiku-5-5-20260901",
-                "content": [{"type": "text", "text": '{"score": 77}'}],
-                "stop_reason": "end_turn",
-                "stop_sequence": None,
-                "usage": {"input_tokens": 1234, "output_tokens": 56},
-            },
-        )
-
-    response = generate(claude(handler))
-
-    assert (response.data, response.model) == ({"score": 77}, "claude-haiku-5-5-20260901")
-    assert (response.input_tokens, response.output_tokens) == (1234, 56)
-    [request] = requests
-    body = json.loads(request.content)
-    assert request.headers["x-api-key"] == ANTHROPIC_KEY
-    assert body["output_config"] == {"format": {"type": "json_schema", "schema": {"type": "object"}}}
-    assert (body["model"], body["system"], body["max_tokens"]) == ("claude-haiku-5-5", "Be brief.", 100)
-
-
-@pytest.mark.parametrize(
-    ("status", "error", "message", "fatal"),
-    [
-        (401, "authentication_error", "Claude rejected your Anthropic API key. Check it in Settings.", True),
-        (
-            404,
-            "not_found_error",
-            "Claude has no model called “claude-haiku-5-5”. Check the model names in Settings.",
-            True,
-        ),
-        (400, "invalid_request_error", "Your Anthropic account is out of credit.", True),
-    ],
-)
-def test_claude_errors_are_explained(status: int, error: str, message: str, fatal: bool) -> None:
-    detail = "Your credit balance is too low." if status == 400 else "nope"
-    body = {"type": "error", "error": {"type": error, "message": detail}}
-
-    with pytest.raises(LLMError) as raised:
-        generate(claude(lambda _: httpx2.Response(status, json=body)))
-
-    assert (raised.value.message, raised.value.fatal) == (message, fatal)
