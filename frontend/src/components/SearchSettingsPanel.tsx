@@ -1,15 +1,11 @@
-import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
-import {
-  getSearchSettings,
-  saveSearchApiKey,
-  saveSearchSettings,
-  type Platform,
-  type SearchSettings,
-  type SearchSettingsInput,
-  type Seniority,
-  type WorkMode,
-} from "./api";
-import { KeyIcon, SlidersIcon } from "./icons";
+import { useEffect, useState } from "react";
+import { getSearchSettings, saveSearchSettings } from "../api/searchSettings";
+import { saveSearchApiKey } from "../api/settings";
+import type { Platform, SearchSettings, SearchSettingsInput, Seniority, WorkMode } from "../types/searchSettings";
+import { ApiKeyField } from "./form/ApiKeyField";
+import { Field } from "./form/Field";
+import { TermInput } from "./form/TermInput";
+import { SlidersIcon } from "./icons";
 
 const WORK_MODES: { id: WorkMode; label: string }[] = [
   { id: "remote", label: "Remote" },
@@ -382,89 +378,6 @@ function ChevronIcon({ open }: { open: boolean }) {
   );
 }
 
-export function Field({
-  label,
-  hint,
-  htmlFor,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  htmlFor?: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="field">
-      {htmlFor ? (
-        <label className="field-label" htmlFor={htmlFor}>
-          {label}
-        </label>
-      ) : (
-        <div className="field-label">{label}</div>
-      )}
-      {children}
-      {hint && <p className="field-hint">{hint}</p>}
-    </div>
-  );
-}
-
-export function TermInput({
-  label,
-  terms,
-  placeholder,
-  onChange,
-}: {
-  label: string;
-  terms: string[];
-  placeholder: string;
-  onChange: (terms: string[]) => void;
-}) {
-  const [text, setText] = useState("");
-
-  function commit() {
-    const term = text.trim().replace(/\s+/g, " ");
-    if (term && !terms.some((t) => t.toLowerCase() === term.toLowerCase())) {
-      onChange([...terms, term]);
-    }
-    setText("");
-  }
-
-  function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      commit();
-    } else if (event.key === "Backspace" && text === "" && terms.length > 0) {
-      onChange(terms.slice(0, -1));
-    }
-  }
-
-  return (
-    <div className="term-input">
-      {terms.map((term) => (
-        <span className="chip" key={term}>
-          {term}
-          <button
-            type="button"
-            className="chip-remove"
-            aria-label={`Remove ${term}`}
-            onClick={() => onChange(terms.filter((t) => t !== term))}
-          >
-            ×
-          </button>
-        </span>
-      ))}
-      <input
-        aria-label={`Add ${label.toLowerCase()}`}
-        value={text}
-        placeholder={terms.length === 0 ? placeholder : "Add another…"}
-        onChange={(event) => setText(event.target.value)}
-        onKeyDown={onKeyDown}
-        onBlur={commit}
-      />
-    </div>
-  );
-}
-
 function SearchApiKeyField({
   settings,
   onChange,
@@ -487,87 +400,5 @@ function SearchApiKeyField({
         Get a key
       </a>
     </ApiKeyField>
-  );
-}
-
-export function ApiKeyField({
-  label,
-  placeholder,
-  stored,
-  onSave,
-  children,
-}: {
-  label: string;
-  placeholder: string;
-  stored: { set: boolean; last4: string | null };
-  onSave: (key: string) => Promise<void>;
-  children: ReactNode;
-}) {
-  const [editing, setEditing] = useState(!stored.set);
-  const [key, setKey] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function save() {
-    setSaving(true);
-    setError(null);
-    try {
-      await onSave(key);
-      setKey("");
-      setEditing(false);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="field api-key">
-      <div className="field-label">{label}</div>
-      {editing ? (
-        <form
-          className="api-key-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (key.trim() && !saving) void save();
-          }}
-        >
-          <input
-            className="text-input"
-            type="password"
-            autoComplete="off"
-            aria-label={label}
-            placeholder={placeholder}
-            value={key}
-            onChange={(event) => setKey(event.target.value)}
-          />
-          <button type="submit" className="button button-secondary button-small" disabled={!key.trim() || saving}>
-            {saving ? "Saving…" : "Save key"}
-          </button>
-          {stored.set && (
-            <button type="button" className="button button-ghost" onClick={() => setEditing(false)}>
-              Cancel
-            </button>
-          )}
-        </form>
-      ) : (
-        <div className="api-key-saved">
-          <KeyIcon />
-          <span>
-            Key ending in <code>{stored.last4}</code>
-          </span>
-          <button type="button" className="button button-ghost" onClick={() => setEditing(true)}>
-            Replace
-          </button>
-        </div>
-      )}
-      {error && (
-        <p className="field-error" role="alert">
-          {error}
-        </p>
-      )}
-      <p className="field-hint">{children}</p>
-    </div>
   );
 }

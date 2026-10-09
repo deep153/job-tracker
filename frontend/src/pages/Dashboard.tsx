@@ -1,23 +1,17 @@
 import { useEffect, useState } from "react";
-import {
-  ApiError,
-  getRun,
-  getSearchSettings,
-  listCompanies,
-  listFilteredOutJobs,
-  listJobs,
-  listJobsBelowThreshold,
-  listRuns,
-  startRun,
-  type Company,
-  type FilterRule,
-  type FilteredJob,
-  type FitScore,
-  type Job,
-  type Run,
-  type SearchSettings,
-} from "./api";
-import { CompaniesPanel } from "./CompaniesPanel";
+import { ApiError } from "../api/client";
+import { listCompanies } from "../api/companies";
+import { listFilteredOutJobs, listJobs, listJobsBelowThreshold } from "../api/jobs";
+import { getRun, listRuns, startRun } from "../api/runs";
+import { getSearchSettings } from "../api/searchSettings";
+import { CompaniesPanel } from "../components/CompaniesPanel";
+import { AlertIcon, BriefcaseIcon, CheckIcon, ExternalIcon, PinIcon, PlayIcon, SlidersIcon } from "../components/icons";
+import { SearchSettingsPanel } from "../components/SearchSettingsPanel";
+import { Topbar } from "../components/Topbar";
+import type { Company } from "../types/company";
+import type { FilterRule, FilteredJob, FitScore, Job } from "../types/job";
+import type { Run } from "../types/run";
+import type { SearchSettings } from "../types/searchSettings";
 import {
   FILTER_LABELS,
   PLATFORM_LABELS,
@@ -26,10 +20,7 @@ import {
   fullDate,
   timeAgo,
   totalFilteredOut,
-} from "./format";
-import { AlertIcon, BriefcaseIcon, CheckIcon, ExternalIcon, PinIcon, PlayIcon, SlidersIcon } from "./icons";
-import { SearchSettingsPanel } from "./SearchSettingsPanel";
-import { Topbar } from "./Topbar";
+} from "../utils/format";
 
 const POLL_INTERVAL_MS = 700;
 

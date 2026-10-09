@@ -1,16 +1,11 @@
 import { useEffect, useState } from "react";
-import {
-  getAiCosts,
-  getAiSettings,
-  saveAnthropicApiKey,
-  saveModels,
-  type AiCosts,
-  type AiSettings,
-} from "./api";
-import { formatCost, fullDate, timeAgo } from "./format";
-import { AlertIcon } from "./icons";
-import { ApiKeyField, Field } from "./SearchSettingsPanel";
-import { Topbar } from "./Topbar";
+import { getAiCosts, getAiSettings, saveAnthropicApiKey, saveModels } from "../api/settings";
+import { ApiKeyField } from "../components/form/ApiKeyField";
+import { Field } from "../components/form/Field";
+import { AlertIcon } from "../components/icons";
+import { Topbar } from "../components/Topbar";
+import type { AiCosts, AiSettings } from "../types/settings";
+import { formatCost, fullDate, timeAgo } from "../utils/format";
 
 const ANTHROPIC_CONSOLE = "https://console.anthropic.com/settings/keys";
 

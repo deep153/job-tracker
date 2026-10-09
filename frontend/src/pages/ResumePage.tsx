@@ -1,19 +1,11 @@
 import { useEffect, useState, type DragEvent } from "react";
-import {
-  getResume,
-  listResumeVersions,
-  saveResumeMapping,
-  saveResumeSkills,
-  uploadResume,
-  type Resume,
-  type ResumeMapping,
-  type ResumeParagraph,
-  type ResumeVersion,
-} from "./api";
-import { fullDate, timeAgo } from "./format";
-import { AlertIcon, CheckIcon, DownloadIcon, ExternalIcon, FileIcon, UploadIcon } from "./icons";
-import { Field, TermInput } from "./SearchSettingsPanel";
-import { Topbar } from "./Topbar";
+import { getResume, listResumeVersions, saveResumeMapping, saveResumeSkills, uploadResume } from "../api/resume";
+import { Field } from "../components/form/Field";
+import { TermInput } from "../components/form/TermInput";
+import { AlertIcon, CheckIcon, DownloadIcon, ExternalIcon, FileIcon, UploadIcon } from "../components/icons";
+import { Topbar } from "../components/Topbar";
+import type { Resume, ResumeMapping, ResumeParagraph, ResumeVersion } from "../types/resume";
+import { fullDate, timeAgo } from "../utils/format";
 
 const DOCX_ACCEPT = ".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 

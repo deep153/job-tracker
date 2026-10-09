@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { setCompanyBlocked, type Company } from "./api";
-import { PLATFORM_LABELS, companyName, fullDate } from "./format";
+import { setCompanyBlocked } from "../api/companies";
+import type { Company } from "../types/company";
+import { PLATFORM_LABELS, companyName, fullDate } from "../utils/format";
 import { AlertIcon, BuildingIcon } from "./icons";
 
 export function CompaniesPanel({

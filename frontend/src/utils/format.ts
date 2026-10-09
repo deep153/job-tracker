@@ -1,4 +1,5 @@
-import type { FilterRule, Platform } from "./api";
+import type { FilterRule } from "../types/job";
+import type { Platform } from "../types/searchSettings";
 
 export const PLATFORM_LABELS: Record<Platform, string> = {
   greenhouse: "Greenhouse",
