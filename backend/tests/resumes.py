@@ -10,7 +10,10 @@ from fastapi.testclient import TestClient
 DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 SUMMARY = "Backend engineer with six years of experience building payment systems in Python and Go."
-SKILL_LINES = ["Languages: Python, Go, TypeScript, SQL", "Infrastructure: PostgreSQL; Docker; Kubernetes; AWS (Lambda, S3)"]
+SKILL_LINES = [
+    "Languages: Python, Go, TypeScript, SQL",
+    "Infrastructure: PostgreSQL; Docker; Kubernetes; AWS (Lambda, S3)",
+]
 
 
 def sample_resume(summary: str = SUMMARY, pages: int = 1) -> bytes:
@@ -36,7 +39,9 @@ def sample_resume(summary: str = SUMMARY, pages: int = 1) -> bytes:
         title.font.size = Pt(11)
         row.cells[1].paragraphs[0].text = "2021 – Present"
         for n in range(3):
-            document.add_paragraph(f"Built ledger service number {page * 3 + n + 1} handling card payments.", "List Bullet")
+            document.add_paragraph(
+                f"Built ledger service number {page * 3 + n + 1} handling card payments.", "List Bullet"
+            )
     document.add_heading("Education", level=1)
     document.add_paragraph("B.S. Computer Science, State University, 2018")
     buffer = io.BytesIO()

@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from pypdf import PdfReader
 
 from job_tracker.app import create_app
-from job_tracker.libreoffice import LibreOffice
+from job_tracker.clients.libreoffice import LibreOffice
 from tests.resumes import SKILL_LINES, SUMMARY, index_of, mapping_for, sample_resume, upload
 
 
@@ -84,7 +84,9 @@ def test_master_skills_list_can_be_edited(client: TestClient) -> None:
     resume = upload(client, sample_resume()).json()
     client.put("/api/resume/mapping", json=mapping_for(resume))
 
-    edited = client.put("/api/resume/skills", json={"skills": [" Rust ", "Python", "python", "Go", "", "Distributed  systems"]})
+    edited = client.put(
+        "/api/resume/skills", json={"skills": [" Rust ", "Python", "python", "Go", "", "Distributed  systems"]}
+    )
 
     assert edited.status_code == 200, edited.text
     assert edited.json()["skills"] == ["Rust", "Python", "Go", "Distributed systems"]
@@ -93,7 +95,12 @@ def test_master_skills_list_can_be_edited(client: TestClient) -> None:
     # Saving the same mapping again keeps the edits; changing the Skills section starts over from it.
     assert client.put("/api/resume/mapping", json=mapping_for(resume)).json()["skills"][0] == "Rust"
     languages_only = {**mapping_for(resume), "skills": [index_of(resume, SKILL_LINES[0])]}
-    assert client.put("/api/resume/mapping", json=languages_only).json()["skills"] == ["Python", "Go", "TypeScript", "SQL"]
+    assert client.put("/api/resume/mapping", json=languages_only).json()["skills"] == [
+        "Python",
+        "Go",
+        "TypeScript",
+        "SQL",
+    ]
 
     emptied = client.put("/api/resume/skills", json={"skills": [" ", ""]})
     assert emptied.status_code == 422
@@ -144,9 +151,15 @@ def test_incomplete_or_invalid_mappings_are_rejected(client: TestClient) -> None
     cases = [
         ({**good, "summary": []}, "Mark at least one paragraph as your Summary."),
         ({**good, "skills": []}, "Mark at least one paragraph as your Skills section."),
-        ({**good, "skills": [*good["skills"], *good["summary"]]}, "A paragraph can be part of the Summary or the Skills section, not both."),
+        (
+            {**good, "skills": [*good["skills"], *good["summary"]]},
+            "A paragraph can be part of the Summary or the Skills section, not both.",
+        ),
         ({**good, "summary": [999]}, "Paragraph 999 isn't in this resume."),
-        ({**good, "summary": [*good["summary"], blank]}, "Blank paragraphs can't be part of the Summary or Skills section."),
+        (
+            {**good, "summary": [*good["summary"], blank]},
+            "Blank paragraphs can't be part of the Summary or Skills section.",
+        ),
         ({**good, "skills": heading_only}, "The paragraphs marked as Skills don't list any skills."),
     ]
     for mapping, message in cases:

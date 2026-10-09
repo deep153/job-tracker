@@ -65,7 +65,9 @@ def discover_boards(
     boards.search_returns([greenhouse_job_url(board_id) for board_id in board_ids])
 
 
-def wait_for_run(client: TestClient, run_id: int, until: Callable[[dict[str, Any]], bool] | None = None) -> dict[str, Any]:
+def wait_for_run(
+    client: TestClient, run_id: int, until: Callable[[dict[str, Any]], bool] | None = None
+) -> dict[str, Any]:
     """Poll a run until `until` holds (default: the run is no longer running)."""
     check = until or (lambda run: run["status"] != "running")
     deadline = time.monotonic() + 5

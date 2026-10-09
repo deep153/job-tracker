@@ -9,7 +9,7 @@ from typing import Any
 
 import httpx
 
-from job_tracker.llm import LLMError, LLMResponse
+from job_tracker.clients.claude import LLMError, LLMResponse
 
 FIXTURES = Path(__file__).parent / "fixtures"
 

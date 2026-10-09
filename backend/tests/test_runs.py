@@ -70,9 +70,7 @@ def test_repost_is_one_job_and_removed_posting_is_closed(client: TestClient, boa
     assert second["closed_jobs"] == 1
 
 
-def test_failing_board_is_recorded_and_other_boards_still_complete(
-    client: TestClient, boards: FakeJobBoards
-) -> None:
+def test_failing_board_is_recorded_and_other_boards_still_complete(client: TestClient, boards: FakeJobBoards) -> None:
     boards.fail("greenhouse", "broken", status=503)
     discover_boards(client, boards, ["broken", "acme"])
 

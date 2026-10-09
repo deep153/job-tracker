@@ -49,7 +49,9 @@ def test_every_platform_can_be_turned_on(client: TestClient) -> None:
     available = {p["id"]: p["supported"] for p in client.get("/api/search-settings").json()["available_platforms"]}
     assert available == {"greenhouse": True, "lever": True, "ashby": True}
 
-    response = client.put("/api/search-settings", json={**READY_SETTINGS, "platforms": ["greenhouse", "lever", "ashby"]})
+    response = client.put(
+        "/api/search-settings", json={**READY_SETTINGS, "platforms": ["greenhouse", "lever", "ashby"]}
+    )
 
     assert response.status_code == 200
     assert response.json()["platforms"] == ["greenhouse", "lever", "ashby"]

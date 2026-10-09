@@ -6,7 +6,7 @@ import httpx
 from fastapi.testclient import TestClient
 
 from job_tracker.app import create_app
-from job_tracker.discovery import MAX_SEARCH_QUERIES_PER_RUN
+from job_tracker.services.discovery import MAX_SEARCH_QUERIES_PER_RUN
 from tests.conftest import BROAD_SETTINGS, READY_SETTINGS, configure_search, run_to_completion
 from tests.fakes import FakeJobBoards, ashby_job_url, greenhouse_job_url, lever_job_url
 
@@ -227,9 +227,7 @@ def test_lever_and_ashby_salaries_feed_the_minimum_salary_filter(client: TestCli
     assert rejections(client)["Backend Engineer"] == ("salary", "Pays up to $190,000, below your $200,000 minimum.")
 
 
-def test_work_mode_stated_by_the_platform_drives_the_location_filter(
-    client: TestClient, boards: FakeJobBoards
-) -> None:
+def test_work_mode_stated_by_the_platform_drives_the_location_filter(client: TestClient, boards: FakeJobBoards) -> None:
     discover_all(client, boards, platforms=["lever", "ashby"], work_modes=["onsite"])
     run_to_completion(client)
 
@@ -240,7 +238,9 @@ def test_work_mode_stated_by_the_platform_drives_the_location_filter(
         "Machine Learning Engineer": ("location", "Remote role, and you haven't chosen remote."),
     }
 
-    client.put("/api/search-settings", json={**BROAD_SETTINGS, "platforms": ["lever", "ashby"], "work_modes": ["hybrid"]})
+    client.put(
+        "/api/search-settings", json={**BROAD_SETTINGS, "platforms": ["lever", "ashby"], "work_modes": ["hybrid"]}
+    )
     assert sorted(jobs_by_title(client)) == ["Backend Engineer", "Platform Engineer", "Senior Software Engineer"]
     assert rejections(client)["Support Engineer"] == ("location", "On-site role, and you haven't chosen on-site.")
 
