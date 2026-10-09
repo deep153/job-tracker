@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from tests.conftest import READY_SETTINGS, SEARCH_KEY, configure_search
+from tests.support.api import READY_SETTINGS, SEARCH_KEY, configure_search
 
 
 def test_run_is_refused_until_search_settings_are_complete(client: TestClient) -> None:

@@ -8,7 +8,7 @@ from pypdf import PdfReader
 
 from job_tracker.app import create_app
 from job_tracker.clients.libreoffice import LibreOffice
-from tests.resumes import SKILL_LINES, SUMMARY, index_of, mapping_for, sample_resume, upload
+from tests.support.resumes import SKILL_LINES, SUMMARY, index_of, mapping_for, sample_resume, upload
 
 
 def pdf_text(pdf: bytes) -> str:

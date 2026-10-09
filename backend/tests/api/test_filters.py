@@ -2,8 +2,8 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 
-from tests.conftest import READY_SETTINGS, discover_boards, run_to_completion
-from tests.fakes import FakeJobBoards, greenhouse_job
+from tests.support.api import READY_SETTINGS, discover_boards, run_to_completion
+from tests.support.fake_job_boards import FakeJobBoards, greenhouse_job
 
 BOARD = "globex"
 NYC = "New York, NY"

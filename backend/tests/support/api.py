@@ -1,14 +1,13 @@
+"""Helpers for driving the app through its HTTP API, the way the frontend does."""
+
 import time
-from collections.abc import Callable, Iterator
-from pathlib import Path
+from collections.abc import Callable
 from typing import Any
 
-import pytest
 from fastapi.testclient import TestClient
 
-from job_tracker.app import create_app
-from tests.fakes import FakeJobBoards, FakeLLM, greenhouse_job_url
-from tests.resumes import add_ready_resume
+from tests.support.fake_job_boards import FakeJobBoards, greenhouse_job_url
+from tests.support.resumes import add_ready_resume
 
 SEARCH_KEY = "brave-test-key-1234"
 ANTHROPIC_KEY = "sk-ant-test-key-5678"
@@ -26,23 +25,6 @@ BROAD_SETTINGS: dict[str, Any] = {
     "roles": ["Engineer"],
     "locations": ["New York, NY", "San Francisco, CA", "Chicago, IL"],
 }
-
-
-@pytest.fixture
-def boards() -> FakeJobBoards:
-    return FakeJobBoards()
-
-
-@pytest.fixture
-def llm() -> FakeLLM:
-    return FakeLLM()
-
-
-@pytest.fixture
-def client(tmp_path: Path, boards: FakeJobBoards, llm: FakeLLM) -> Iterator[TestClient]:
-    app = create_app(db_path=tmp_path / "test.db", http=boards.client(), llm=llm)
-    with TestClient(app) as test_client:
-        yield test_client
 
 
 def configure_search(client: TestClient, settings: dict[str, Any] | None = None) -> None:
