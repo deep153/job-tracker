@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     first_seen_at TEXT NOT NULL,
     last_seen_at TEXT NOT NULL,
     closed INTEGER NOT NULL DEFAULT 0,
+    dismissed INTEGER NOT NULL DEFAULT 0,
     rejected_rule TEXT,
     rejected_reason TEXT,
     UNIQUE (platform, external_id)
@@ -144,7 +145,7 @@ class Database:
 
 # Columns added since a table was first created, which older databases lack.
 _ADDED_COLUMNS = {
-    "jobs": {"work_mode": "TEXT"},
+    "jobs": {"work_mode": "TEXT", "dismissed": "INTEGER NOT NULL DEFAULT 0"},
     "runs": {
         "scoring_total": "INTEGER NOT NULL DEFAULT 0",
         "scored_jobs": "INTEGER NOT NULL DEFAULT 0",

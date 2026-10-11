@@ -7,6 +7,8 @@ Rule = Literal["role", "excluded_keyword", "location", "seniority", "experience"
 
 RULES: tuple[Rule, ...] = ("role", "excluded_keyword", "location", "seniority", "experience", "sponsorship", "salary")
 
+JobSort = Literal["score", "posted"]
+
 
 @dataclass(frozen=True)
 class Rejection:
@@ -52,3 +54,14 @@ class Job:
     closed: bool
     rejection: Rejection | None
     score: FitScore | None = None
+    dismissed: bool = False
+
+
+@dataclass(frozen=True)
+class JobQuery:
+    """How the dashboard narrows and orders a job list. `posted_since` is a UTC ISO timestamp."""
+
+    company: str | None = None
+    location: str | None = None
+    posted_since: str | None = None
+    sort: JobSort = "score"

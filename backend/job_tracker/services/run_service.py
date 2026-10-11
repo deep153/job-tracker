@@ -50,6 +50,18 @@ def describe_fetch_error(error: Exception) -> str:
     return f"Unexpected error: {error}"
 
 
+def scoring_missing(settings: SettingsService, resumes: ResumeService) -> list[str]:
+    """Human-readable list of what still has to be set up before jobs can be scored."""
+    missing: list[str] = []
+    if settings.ai().anthropic_api_key is None:
+        missing.append("Add your Anthropic API key in Settings.")
+    if resumes.current() is None:
+        missing.append("Upload your resume and mark its Summary and Skills.")
+    elif resumes.master() is None:
+        missing.append("Mark your resume's Summary and Skills.")
+    return missing
+
+
 @dataclass(frozen=True)
 class RunInputs:
     """Everything a run uses, as it was when the run started."""
@@ -88,13 +100,7 @@ class RunService:
     def missing(self) -> list[str]:
         """Human-readable list of what still has to be set up before a run can start."""
         missing = self._settings.search().missing(has_search_key=self._settings.search_api_key() is not None)
-        if self._settings.ai().anthropic_api_key is None:
-            missing.append("Add your Anthropic API key in Settings.")
-        if self._resumes.current() is None:
-            missing.append("Upload your resume and mark its Summary and Skills.")
-        elif self._resumes.master() is None:
-            missing.append("Mark your resume's Summary and Skills.")
-        return missing
+        return missing + scoring_missing(self._settings, self._resumes)
 
     def get(self, run_id: int) -> Run:
         with self._db.transaction() as uow:

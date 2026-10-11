@@ -44,14 +44,20 @@ def ashby_job_url(board_id: str, job_id: str = "0b6e1c2a-2222-4c3d-8e9f-00000000
 _next_job_id = itertools.count(4100000001)
 
 
-def greenhouse_job(board_id: str, title: str, location: str, content: str = "<p>Join our team.</p>") -> dict[str, Any]:
+def greenhouse_job(
+    board_id: str,
+    title: str,
+    location: str,
+    content: str = "<p>Join our team.</p>",
+    updated_at: str = "2026-10-01T09:00:00-04:00",
+) -> dict[str, Any]:
     """One job in the shape the Greenhouse job board API returns it (`content` is plain HTML here)."""
     job_id = next(_next_job_id)
     return {
         "absolute_url": greenhouse_job_url(board_id, job_id),
         "id": job_id,
         "location": {"name": location},
-        "updated_at": "2026-10-01T09:00:00-04:00",
+        "updated_at": updated_at,
         "title": title,
         "content": html.escape(content),
     }

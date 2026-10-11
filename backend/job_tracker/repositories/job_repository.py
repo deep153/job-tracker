@@ -1,7 +1,7 @@
 import json
 import sqlite3
 
-from job_tracker.models.job import FitScore, Job, Rejection
+from job_tracker.models.job import FitScore, Job, JobQuery, JobSort, Rejection
 from job_tracker.models.posting import Posting, SalaryRange
 
 # The newest score for each job, whichever resume version it was scored against.
@@ -10,15 +10,25 @@ _LATEST_SCORES = """
     JOIN (SELECT job_id, MAX(id) AS id FROM scores GROUP BY job_id) AS newest ON newest.id = scores.id
 """
 
-# Open jobs at companies that aren't blocked, with their latest score.
-_VISIBLE = f"""
+# Jobs with their latest score.
+_SCORED = f"""
     SELECT jobs.*, latest.id AS score_id, latest.score, latest.reasons, latest.matched_keywords,
         latest.missing_keywords, latest.model, latest.resume_version, latest.scored_at
     FROM jobs
-    JOIN companies ON companies.platform = jobs.platform AND companies.board_id = jobs.board_id
     LEFT JOIN ({_LATEST_SCORES}) AS latest ON latest.job_id = jobs.id
-    WHERE jobs.closed = 0 AND companies.blocked = 0
 """
+
+# Open jobs I haven't dismissed, at companies that aren't blocked, with their latest score.
+_VISIBLE = f"""
+    {_SCORED}
+    JOIN companies ON companies.platform = jobs.platform AND companies.board_id = jobs.board_id
+    WHERE jobs.closed = 0 AND jobs.dismissed = 0 AND companies.blocked = 0
+"""
+
+_ORDER_BY: dict[JobSort, str] = {
+    "score": "latest.score IS NOT NULL, latest.score DESC, jobs.updated_at DESC",
+    "posted": "jobs.updated_at DESC, latest.score DESC",
+}
 
 
 class JobRepository:
@@ -100,28 +110,43 @@ class JobRepository:
             (resume_version,),
         )
 
-    def matches(self, min_score: int) -> list[Job]:
-        """Visible jobs that passed the filters and scored at least `min_score`, best first."""
-        return self._many(
-            f"""
-            {_VISIBLE} AND jobs.rejected_rule IS NULL AND latest.score >= ?
-            ORDER BY latest.score DESC, jobs.updated_at DESC
-            """,
-            (min_score,),
-        )
+    def get(self, job_id: int) -> Job | None:
+        """Any stored job, with its latest score."""
+        return self._one(f"{_SCORED} WHERE jobs.id = ?", (job_id,))
 
-    def below_threshold(self, min_score: int) -> list[Job]:
-        """Visible jobs that passed the filters but aren't scored yet (first) or scored under `min_score`."""
-        return self._many(
-            f"""
-            {_VISIBLE} AND jobs.rejected_rule IS NULL AND (latest.score IS NULL OR latest.score < ?)
-            ORDER BY latest.score IS NOT NULL, latest.score DESC, jobs.updated_at DESC
-            """,
-            (min_score,),
+    def dismiss(self, job_id: int) -> bool:
+        return self._conn.execute("UPDATE jobs SET dismissed = 1 WHERE id = ?", (job_id,)).rowcount > 0
+
+    def matches(self, min_score: int, query: JobQuery | None = None) -> list[Job]:
+        """Visible jobs that passed the filters and scored at least `min_score` (best first, by default)."""
+        return self._listed("jobs.rejected_rule IS NULL AND latest.score >= ?", [min_score], query or JobQuery())
+
+    def below_threshold(self, min_score: int, query: JobQuery | None = None) -> list[Job]:
+        """Visible jobs that passed the filters but aren't scored yet or scored under `min_score`.
+
+        Sorted by score, unscored jobs come first."""
+        return self._listed(
+            "jobs.rejected_rule IS NULL AND (latest.score IS NULL OR latest.score < ?)",
+            [min_score],
+            query or JobQuery(),
         )
 
     def filtered_out(self) -> list[Job]:
         return self._many(f"{_VISIBLE} AND jobs.rejected_rule IS NOT NULL ORDER BY jobs.updated_at DESC")
+
+    def _listed(self, condition: str, params: list[object], query: JobQuery) -> list[Job]:
+        if query.company is not None:
+            condition += " AND jobs.board_id = ?"
+            params.append(query.company)
+        if query.location is not None:
+            condition += (
+                " AND EXISTS (SELECT 1 FROM json_each(jobs.locations) WHERE json_each.value LIKE ? ESCAPE '\\')"
+            )
+            params.append(f"%{_escape_like(query.location)}%")
+        if query.posted_since is not None:
+            condition += " AND jobs.updated_at >= ?"
+            params.append(query.posted_since)
+        return self._many(f"{_VISIBLE} AND {condition} ORDER BY {_ORDER_BY[query.sort]}", tuple(params))
 
     def _one(self, sql: str, params: tuple[object, ...]) -> Job | None:
         row = self._conn.execute(sql, params).fetchone()
@@ -129,6 +154,10 @@ class JobRepository:
 
     def _many(self, sql: str, params: tuple[object, ...] | list[int] = ()) -> list[Job]:
         return [_job(row) for row in self._conn.execute(sql, params).fetchall()]
+
+
+def _escape_like(text: str) -> str:
+    return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 def _posting_fields(posting: Posting) -> tuple[object, ...]:
@@ -175,6 +204,7 @@ def _job(row: sqlite3.Row) -> Job:
         closed=bool(row["closed"]),
         rejection=rejection,
         score=_score(row),
+        dismissed=bool(row["dismissed"]),
     )
 
 

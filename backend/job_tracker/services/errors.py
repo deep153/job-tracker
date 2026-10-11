@@ -23,6 +23,10 @@ class TooLargeError(ServiceError):
     pass
 
 
+class AIRequestError(ServiceError):
+    """Claude couldn't give an answer; the message says why."""
+
+
 class SetupIncompleteError(ServiceError):
     """A run can't start until these setup steps are done."""
 
