@@ -8,7 +8,7 @@ The application then moves to `in_review`, and I land on a review screen showing
 
 **Blocked by:** 07 (Fit Scorer and matches dashboard)
 
-**Status:** done (d8ff153)
+**Status:** done (db27d45)
 
 - [x] "Apply" on a job creates an application in `drafting`, then moves it to `in_review` once tailoring completes
 - [x] Only the mapped Summary and Skills paragraphs change; all other text in the tailored .docx is identical to the master

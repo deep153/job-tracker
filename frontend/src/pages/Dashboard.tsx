@@ -752,6 +752,11 @@ function JobRow({ job, onOpen, onDismiss }: { job: Job | FilteredJob } & JobActi
           <span className="dot" aria-hidden="true" />
           <span className="badge">{PLATFORM_LABELS[job.platform]}</span>
           {job.salary && <span className="badge badge-green">{formatSalary(job.salary)}</span>}
+          {job.application && job.application.status !== "failed" && (
+            <a className="badge badge-link" href={`#/applications/${job.application.id}`}>
+              {job.application.status === "drafting" ? "Tailoring resume…" : "Draft in review"}
+            </a>
+          )}
         </div>
         {rejection && (
           <p className="job-rejection">
