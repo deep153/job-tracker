@@ -8,18 +8,18 @@ The application then moves to `in_review`, and I land on a review screen showing
 
 **Blocked by:** 07 (Fit Scorer and matches dashboard)
 
-**Status:** ready-for-agent
+**Status:** done (d8ff153)
 
-- [ ] "Apply" on a job creates an application in `drafting`, then moves it to `in_review` once tailoring completes
-- [ ] Only the mapped Summary and Skills paragraphs change; all other text in the tailored .docx is identical to the master
-- [ ] Original formatting segments (fonts, styles) of the edited paragraphs are preserved
-- [ ] Any skill returned by the LLM that is not in the master skills list is removed in code
-- [ ] Tailored PDF page count equals the master's; if not, one shorten-and-retry happens; if it still fails, the error is surfaced clearly
-- [ ] Keyword coverage before and after is stored and shown
-- [ ] Tailored .docx and PDF are both kept and linked to the job via a resume version
-- [ ] Review screen shows the summary/skills diff, PDF preview and coverage numbers
-- [ ] Cancelling in review discards the application; nothing is submitted
-- [ ] Tailoring cost is recorded and included in the Settings cost summary
-- [ ] Tests use real python-docx and LibreOffice with a scripted fake LLM
-- [ ] Test: the tailored PDF has the same page count as the master and its text contains only master-list skills, even when the fake LLM returns a skill not in the list
-- [ ] Test: a fake LLM summary too long to fit triggers the shorten-and-retry and ends at the master's page count
+- [x] "Apply" on a job creates an application in `drafting`, then moves it to `in_review` once tailoring completes
+- [x] Only the mapped Summary and Skills paragraphs change; all other text in the tailored .docx is identical to the master
+- [x] Original formatting segments (fonts, styles) of the edited paragraphs are preserved
+- [x] Any skill returned by the LLM that is not in the master skills list is removed in code
+- [x] Tailored PDF page count equals the master's; if not, one shorten-and-retry happens; if it still fails, the error is surfaced clearly
+- [x] Keyword coverage before and after is stored and shown
+- [x] Tailored .docx and PDF are both kept and linked to the job via a resume version
+- [x] Review screen shows the summary/skills diff, PDF preview and coverage numbers
+- [x] Cancelling in review discards the application; nothing is submitted
+- [x] Tailoring cost is recorded and included in the Settings cost summary
+- [x] Tests use real python-docx and LibreOffice with a scripted fake LLM
+- [x] Test: the tailored PDF has the same page count as the master and its text contains only master-list skills, even when the fake LLM returns a skill not in the list
+- [x] Test: a fake LLM summary too long to fit triggers the shorten-and-retry and ends at the master's page count
