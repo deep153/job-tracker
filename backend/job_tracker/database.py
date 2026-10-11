@@ -111,6 +111,36 @@ CREATE TABLE IF NOT EXISTS resume_master (
     skills_paragraphs TEXT,
     skills TEXT
 );
+
+CREATE TABLE IF NOT EXISTS applications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id INTEGER NOT NULL REFERENCES jobs (id),
+    status TEXT NOT NULL,
+    error TEXT,
+    cost_usd REAL NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS applications_by_job ON applications (job_id);
+
+CREATE TABLE IF NOT EXISTS resume_versions (
+    id INTEGER PRIMARY KEY,
+    application_id INTEGER NOT NULL UNIQUE REFERENCES applications (id),
+    job_id INTEGER NOT NULL REFERENCES jobs (id),
+    master_version INTEGER NOT NULL REFERENCES resume_master (id),
+    directory TEXT NOT NULL,
+    master_summary TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    master_skills TEXT NOT NULL,
+    skills TEXT NOT NULL,
+    keywords TEXT NOT NULL,
+    covered_before TEXT NOT NULL,
+    covered_after TEXT NOT NULL,
+    page_count INTEGER NOT NULL,
+    master_page_count INTEGER NOT NULL,
+    created_at TEXT NOT NULL
+);
 """
 
 

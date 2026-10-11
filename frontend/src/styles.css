@@ -1840,6 +1840,181 @@ select.text-input {
 
 /* Narrow screens */
 
+/* Application review */
+
+.back-link {
+  display: inline-block;
+  margin-bottom: 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.back-link:hover {
+  color: var(--text);
+}
+
+.review-job {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.button-danger {
+  background: var(--red);
+  color: #fff;
+}
+
+.button-danger:hover {
+  background: #912018;
+}
+
+.review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.review-cost {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.review-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 12px;
+  border: 1px solid #fecdca;
+  border-radius: 8px;
+  background: var(--red-soft);
+  color: var(--red);
+  font-weight: 500;
+}
+
+.review-confirm-error {
+  flex-basis: 100%;
+  font-size: 13px;
+}
+
+.review-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-top: 16px;
+  padding: 18px;
+}
+
+.review-status > div {
+  flex: 1;
+}
+
+.review-status .panel-empty {
+  margin-top: 4px;
+}
+
+.review-status .spinner {
+  margin-top: 3px;
+}
+
+.diff-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.diff-side {
+  min-width: 0;
+  padding: 14px 16px;
+}
+
+.diff-side + .diff-side {
+  border-left: 1px solid var(--border);
+}
+
+.diff-side-title {
+  margin: 0 0 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.diff-side p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+mark.diff-added,
+.skill.diff-added {
+  background: var(--green-soft);
+  color: var(--green);
+  border-radius: 3px;
+}
+
+mark.diff-removed,
+.skill.diff-removed {
+  background: var(--red-soft);
+  color: var(--red);
+  border-radius: 3px;
+  text-decoration: line-through;
+}
+
+.diff-legend {
+  font-size: 12px;
+}
+
+.diff-legend mark {
+  padding: 0 4px;
+}
+
+.diff-side .diff-skill-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.diff-side .diff-skill-line + .diff-skill-line {
+  margin-top: 8px;
+}
+
+.diff-skill-label {
+  margin-right: 2px;
+  font-weight: 600;
+}
+
+.skill {
+  padding: 0 6px;
+  border-radius: 3px;
+  background: #f2f4f7;
+  font-size: 13px;
+}
+
+.coverage-numbers {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0;
+  font-size: 15px;
+}
+
+.coverage-numbers strong {
+  font-size: 22px;
+}
+
+.keyword-new {
+  margin-left: 2px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
 @media (max-width: 900px) {
   .layout {
     grid-template-columns: 1fr;

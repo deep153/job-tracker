@@ -1,28 +1,34 @@
 import { useEffect, useState } from "react";
-import type { Page } from "./components/Topbar";
 import { Dashboard } from "./pages/Dashboard";
 import { ResumePage } from "./pages/ResumePage";
+import { ReviewPage } from "./pages/ReviewPage";
 import { SettingsPage } from "./pages/SettingsPage";
 
-function pageFromHash(): Page {
-  if (window.location.hash === "#/resume") return "resume";
-  if (window.location.hash === "#/settings") return "settings";
-  return "jobs";
+type Route = { page: "jobs" | "resume" | "settings" } | { page: "review"; applicationId: number };
+
+function routeFromHash(): Route {
+  const hash = window.location.hash;
+  if (hash === "#/resume") return { page: "resume" };
+  if (hash === "#/settings") return { page: "settings" };
+  const review = /^#\/applications\/(\d+)$/.exec(hash);
+  if (review) return { page: "review", applicationId: Number(review[1]) };
+  return { page: "jobs" };
 }
 
 export function App() {
-  const [page, setPage] = useState(pageFromHash);
+  const [route, setRoute] = useState(routeFromHash);
 
   useEffect(() => {
     const onChange = () => {
-      setPage(pageFromHash());
+      setRoute(routeFromHash());
       window.scrollTo(0, 0);
     };
     window.addEventListener("hashchange", onChange);
     return () => window.removeEventListener("hashchange", onChange);
   }, []);
 
-  if (page === "resume") return <ResumePage />;
-  if (page === "settings") return <SettingsPage />;
+  if (route.page === "review") return <ReviewPage key={route.applicationId} id={route.applicationId} />;
+  if (route.page === "resume") return <ResumePage />;
+  if (route.page === "settings") return <SettingsPage />;
   return <Dashboard />;
 }

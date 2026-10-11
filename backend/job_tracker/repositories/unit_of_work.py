@@ -1,5 +1,6 @@
 import sqlite3
 
+from job_tracker.repositories.application_repository import ApplicationRepository
 from job_tracker.repositories.company_repository import CompanyRepository
 from job_tracker.repositories.job_repository import JobRepository
 from job_tracker.repositories.resume_repository import ResumeRepository
@@ -18,3 +19,4 @@ class UnitOfWork:
         self.runs = RunRepository(conn)
         self.scores = ScoreRepository(conn)
         self.resumes = ResumeRepository(conn)
+        self.applications = ApplicationRepository(conn)

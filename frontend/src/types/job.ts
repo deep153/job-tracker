@@ -28,6 +28,7 @@ export type Job = {
   updated_at: string;
   score: FitScore | null;
   dismissed: boolean;
+  application: { id: number; status: "drafting" | "in_review" | "failed" } | null;
 };
 
 export type FilteredJob = Job & { rejection: { rule: FilterRule; reason: string } };

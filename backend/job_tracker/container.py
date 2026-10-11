@@ -11,10 +11,12 @@ from job_tracker.clients.claude import LLM, ClaudeLLM
 from job_tracker.clients.job_boards import job_board_clients
 from job_tracker.clients.libreoffice import MISSING_MESSAGE, LibreOffice
 from job_tracker.database import Database
+from job_tracker.services.application_service import ApplicationService
 from job_tracker.services.cost_service import CostService
 from job_tracker.services.fit_scorer import FitScorer
 from job_tracker.services.job_service import JobService
 from job_tracker.services.resume_service import ResumeService
+from job_tracker.services.resume_tailor import ResumeTailor
 from job_tracker.services.run_service import RunService
 from job_tracker.services.settings_service import SettingsService
 
@@ -28,6 +30,7 @@ class Services:
     resumes: ResumeService
     jobs: JobService
     runs: RunService
+    applications: ApplicationService
     costs: CostService
 
 
@@ -40,8 +43,11 @@ def build_services(db_path: Path, http: httpx.Client, office: LibreOffice | None
         log.warning(MISSING_MESSAGE)
     job_boards = job_board_clients(http)
     settings = SettingsService(db, job_boards.keys())
-    resumes = ResumeService(db, db_path.parent / "files", office)
-    scorer = FitScorer(llm or ClaudeLLM())
+    files_dir = db_path.parent / "files"
+    resumes = ResumeService(db, files_dir, office)
+    llm = llm or ClaudeLLM()
+    scorer = FitScorer(llm)
     runs = RunService(db, settings, resumes, BraveSearch(http), job_boards, scorer)
     jobs = JobService(db, settings, resumes, scorer)
-    return Services(office, settings, resumes, jobs, runs, CostService(db))
+    applications = ApplicationService(db, files_dir, settings, resumes, ResumeTailor(llm), office)
+    return Services(office, settings, resumes, jobs, runs, applications, CostService(db))
