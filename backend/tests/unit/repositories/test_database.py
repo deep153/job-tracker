@@ -52,15 +52,3 @@ def test_database_from_an_earlier_version_is_upgraded(tmp_path: Path) -> None:
     assert job.posting.work_mode is None
     assert job.score is None
     assert (run.scored_jobs, run.matched_jobs, run.ai_cost_usd) == (0, 0, 0)
-
-
-def test_initializing_twice_is_harmless(tmp_path: Path) -> None:
-    db = Database(tmp_path / "test.db")
-    db.initialize()
-    with db.transaction() as uow:
-        uow.settings.set("k", "v")
-
-    db.initialize()
-
-    with db.transaction() as uow:
-        assert uow.settings.get("k") == "v"

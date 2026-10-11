@@ -73,8 +73,8 @@ Backend (`backend/job_tracker/`). A request flows routes → services → reposi
 | `utils/`        | Small helpers with no app knowledge (timestamps, HTML to text, salary parsing).                  |
 
 `container.py` builds every client and service once; `app.py` wires them into FastAPI. Tests live in
-`backend/tests/`: `api/` drives the app over HTTP, `unit/` mirrors the package layout, and `support/` holds the
-fakes and helpers.
+`backend/tests/`: `api/` drives the app over HTTP, `unit/` covers what HTTP can't reach (the Claude client, pricing and
+database migrations), and `support/` holds the fakes and helpers.
 
 Frontend (`frontend/src/`): `api/` has one module per backend resource on a shared fetch client, `types/` the
 API's shapes, `pages/` the three pages, `components/` everything they share, and `utils/` formatting helpers.
