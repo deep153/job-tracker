@@ -479,6 +479,16 @@ h3 {
   color: var(--green);
 }
 
+.badge-link {
+  background: var(--primary-soft);
+  color: #3730a3;
+  text-decoration: none;
+}
+
+.badge-link:hover {
+  background: #e0e7ff;
+}
+
 .badge-warning {
   background: #fffaeb;
   color: #b54708;
@@ -1881,6 +1891,23 @@ select.text-input {
   margin-left: auto;
   color: var(--text-muted);
   font-size: 13px;
+}
+
+.review-saved {
+  color: var(--text-subtle);
+  font-size: 13px;
+}
+
+.review-unsaved {
+  color: #b54708;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.review-summary-input {
+  padding: 8px 10px;
+  line-height: 1.5;
+  resize: vertical;
 }
 
 .review-confirm {

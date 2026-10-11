@@ -10,6 +10,8 @@ export type TailoredResume = {
   skills: { master: SkillLine[]; tailored: SkillLine[] };
   page_count: number;
   master_page_count: number;
+  /** False when the tailored PDF has more pages than the master. */
+  fits: boolean;
   coverage: {
     keywords: { keyword: string; before: boolean; after: boolean }[];
     before: number;

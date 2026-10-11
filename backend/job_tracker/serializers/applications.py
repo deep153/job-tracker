@@ -21,6 +21,7 @@ def _resume_json(application_id: int, resume: TailoredResume) -> dict[str, Any]:
         },
         "page_count": resume.page_count,
         "master_page_count": resume.master_page_count,
+        "fits": resume.page_count <= resume.master_page_count,
         "coverage": {
             "keywords": keywords,
             "before": sum(resume.covered_before),

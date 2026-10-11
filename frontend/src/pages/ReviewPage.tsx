@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { applyToJob, cancelApplication, getApplication } from "../api/applications";
+import { applyToJob, cancelApplication, editTailoredResume, getApplication } from "../api/applications";
 import { AlertIcon, CheckIcon, DownloadIcon, ExternalIcon } from "../components/icons";
 import { ScoreBadge } from "../components/Score";
 import { Topbar } from "../components/Topbar";
 import type { Application, SkillLine, TailoredResume } from "../types/application";
-import { companyName, formatCost } from "../utils/format";
+import { companyName, formatCost, timeAgo } from "../utils/format";
 
 const POLL_MS = 1500;
 
@@ -68,7 +68,7 @@ export function ReviewPage({ id }: { id: number }) {
         {application?.status === "drafting" && <Drafting application={application} />}
         {application?.status === "failed" && <Failed application={application} />}
         {application?.status === "in_review" && application.resume && (
-          <InReview application={application} resume={application.resume} />
+          <InReview application={application} resume={application.resume} onSaved={setApplication} />
         )}
       </main>
     </div>
@@ -135,15 +135,158 @@ function Failed({ application }: { application: Application }) {
   );
 }
 
-function InReview({ application, resume }: { application: Application; resume: TailoredResume }) {
+type Draft = { summary: string; skills: string[] };
+
+function draftFrom(resume: TailoredResume): Draft {
+  return { summary: resume.summary.tailored.join("\n\n"), skills: resume.skills.tailored.map((l) => l.skills.join(", ")) };
+}
+
+/** Split "Go, AWS (Lambda, S3); SQL" into skills, keeping commas inside brackets. */
+function splitSkills(text: string): string[] {
+  const skills: string[] = [];
+  let current = "";
+  let depth = 0;
+  for (const char of text) {
+    depth += Number("([{".includes(char)) - Number(")]}".includes(char));
+    if (",;".includes(char) && depth <= 0) {
+      skills.push(current);
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  skills.push(current);
+  return skills.map((s) => s.trim()).filter(Boolean);
+}
+
+function editsFrom(draft: Draft): { summary: string[]; skills: string[][] } {
+  return { summary: draft.summary.split(/\n\s*\n/), skills: draft.skills.map(splitSkills) };
+}
+
+function InReview({
+  application,
+  resume,
+  onSaved,
+}: {
+  application: Application;
+  resume: TailoredResume;
+  onSaved: (application: Application) => void;
+}) {
+  const [draft, setDraft] = useState(() => draftFrom(resume));
+  const [busy, setBusy] = useState<"regenerate" | "save" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const dirty = JSON.stringify(editsFrom(draft)) !== JSON.stringify(editsFrom(draftFrom(resume)));
+
+  async function regenerate(then?: () => void) {
+    setBusy(then ? "save" : "regenerate");
+    setError(null);
+    try {
+      const saved = await editTailoredResume(application.id, editsFrom(draft));
+      onSaved(saved);
+      if (saved.resume) setDraft(draftFrom(saved.resume));
+      then?.();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function saveDraft() {
+    const exit = () => {
+      window.location.hash = "#/";
+    };
+    if (dirty) void regenerate(exit);
+    else exit();
+  }
+
   return (
     <>
       <div className="review-actions">
         <CancelButton application={application} />
+        <button type="button" className="button button-secondary" onClick={saveDraft} disabled={busy !== null}>
+          {busy === "save" && <span className="spinner spinner-dark" aria-hidden="true" />}
+          Save draft
+        </button>
+        <span className="review-saved">Saved {timeAgo(application.updated_at)}</span>
         <CostNote usd={application.cost_usd} />
       </div>
+      {!resume.fits && (
+        <div className="notice notice-warning" role="alert">
+          <AlertIcon />
+          <span className="notice-text">
+            The tailored resume runs to {pages(resume.page_count)}, longer than your {resume.master_page_count}-page master. Shorten the Summary or drop some skills, then regenerate.
+          </span>
+        </div>
+      )}
       <div className="resume-layout">
         <div className="resume-main">
+          <section className="panel" aria-labelledby="edit-heading">
+            <div className="panel-header">
+              <h2 className="panel-title" id="edit-heading">
+                Edit
+              </h2>
+              {dirty && <span className="review-unsaved">Unsaved changes</span>}
+            </div>
+            <div className="panel-body">
+              <label className="field">
+                <span className="field-label">Summary</span>
+                <textarea
+                  className="text-input review-summary-input"
+                  rows={5}
+                  value={draft.summary}
+                  onChange={(e) => setDraft({ ...draft, summary: e.target.value })}
+                />
+                {resume.summary.master.length > 1 && (
+                  <span className="field-hint">Separate the paragraphs with a blank line.</span>
+                )}
+              </label>
+              {resume.skills.master.map((line, index) => (
+                <label className="field" key={index}>
+                  <span className="field-label">{line.label ?? `Skills line ${index + 1}`}</span>
+                  <input
+                    className="text-input"
+                    value={draft.skills[index]}
+                    onChange={(e) =>
+                      setDraft({ ...draft, skills: draft.skills.map((s, i) => (i === index ? e.target.value : s)) })
+                    }
+                  />
+                </label>
+              ))}
+              <p className="field-hint">
+                Most relevant skills first, separated by commas. Only skills in your master skills list can be used.
+              </p>
+              {error && (
+                <div className="notice notice-error" role="alert">
+                  <AlertIcon />
+                  <span className="notice-text">{error}</span>
+                </div>
+              )}
+              <div className="panel-actions">
+                <button
+                  type="button"
+                  className="button button-ghost"
+                  onClick={() => {
+                    setDraft(draftFrom(resume));
+                    setError(null);
+                  }}
+                  disabled={!dirty || busy !== null}
+                >
+                  Undo changes
+                </button>
+                <button
+                  type="button"
+                  className="button button-primary"
+                  onClick={() => void regenerate()}
+                  disabled={!dirty || busy !== null}
+                  aria-busy={busy === "regenerate"}
+                >
+                  {busy === "regenerate" && <span className="spinner" aria-hidden="true" />}
+                  {busy === "regenerate" ? "Regenerating…" : "Regenerate PDF"}
+                </button>
+              </div>
+            </div>
+          </section>
           <SummaryDiff master={resume.summary.master} tailored={resume.summary.tailored} />
           <SkillsDiff master={resume.skills.master} tailored={resume.skills.tailored} />
           <Coverage coverage={resume.coverage} />
@@ -167,8 +310,9 @@ function InReview({ application, resume }: { application: Application; resume: T
             </a>
           </div>
           <iframe
+            key={application.updated_at}
             className="resume-preview"
-            src={`${resume.pdf_url}#view=FitH&navpanes=0`}
+            src={`${resume.pdf_url}?v=${encodeURIComponent(application.updated_at)}#view=FitH&navpanes=0`}
             title="PDF preview of the tailored resume"
           />
         </section>

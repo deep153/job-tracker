@@ -4,11 +4,11 @@
 
 **Blocked by:** 09 (Apply: tailor and review screen)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Summary and skills can be edited in review and the PDF regenerated from the edits
-- [ ] Edited skills not in the master skills list are rejected with a clear message
-- [ ] Regenerated PDF that exceeds the master's page count is flagged to me (no silent acceptance)
-- [ ] An application can be saved as a draft and reopened later with all edits preserved
-- [ ] Test: editing the summary and regenerating produces a PDF containing the edited text at the master's page count
-- [ ] Test: a saved draft returns the same review bundle when reopened
+- [x] Summary and skills can be edited in review and the PDF regenerated from the edits
+- [x] Edited skills not in the master skills list are rejected with a clear message
+- [x] Regenerated PDF that exceeds the master's page count is flagged to me (no silent acceptance)
+- [x] An application can be saved as a draft and reopened later with all edits preserved
+- [x] Test: editing the summary and regenerating produces a PDF containing the edited text at the master's page count
+- [x] Test: a saved draft returns the same review bundle when reopened

@@ -7,6 +7,7 @@ from job_tracker.routes.dependencies import ServicesDep
 from job_tracker.routes.resume import DOCX_TYPE
 from job_tracker.serializers.applications import application_json
 from job_tracker.services.application_service import TAILORED_DOCX, TAILORED_PDF
+from job_tracker.validators.applications import TailoredResumeIn
 
 router = APIRouter(prefix="/api", tags=["applications"])
 
@@ -22,6 +23,13 @@ def apply_to_job(job_id: int, services: ServicesDep) -> JSONResponse:
 @router.get("/applications/{application_id}")
 def get_application(application_id: int, services: ServicesDep) -> dict[str, Any]:
     application = services.applications.get(application_id)
+    return application_json(application, services.jobs.get(application.job_id))
+
+
+@router.put("/applications/{application_id}/resume")
+def edit_tailored_resume(application_id: int, body: TailoredResumeIn, services: ServicesDep) -> dict[str, Any]:
+    """Regenerates the tailored .docx and PDF from my edits."""
+    application = services.applications.edit(application_id, body.summary, body.skills)
     return application_json(application, services.jobs.get(application.job_id))
 
 

@@ -1,56 +1,23 @@
 import io
-import time
 from typing import Any
 
 import docx
 import pytest
 from fastapi.testclient import TestClient
-from pypdf import PdfReader
 
 from job_tracker.clients.claude import LLMError
 from job_tracker.services.resume_reader import read_paragraphs
-from tests.support.api import READY_SETTINGS, discover_boards, run_to_completion
-from tests.support.fake_job_boards import FakeJobBoards, greenhouse_job
+from tests.support.applications import apply, page_count, pdf_text, scored_job
+from tests.support.fake_job_boards import FakeJobBoards
 from tests.support.fake_llm import FakeLLM
-from tests.support.resumes import SUMMARY, add_ready_resume
+from tests.support.resumes import SUMMARY
 
-BOARD = "globex"
 TAILORED = "Backend engineer who builds payments APIs in Python and Go, with Kafka event pipelines at scale."
 LONG = " ".join(["Backend engineer who ships reliable, well-tested payment systems for large card networks."] * 40)
 
 
 def tailoring(summary: str = TAILORED, skills: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     return {"summary": [summary], "skills": skills or [], "keywords": ["Python", "Go", "Kafka", "Payments"]}
-
-
-def scored_job(client: TestClient, boards: FakeJobBoards, bold_labels: bool = False) -> int:
-    add_ready_resume(client, bold_labels=bold_labels)
-    boards.serve_jobs(BOARD, [greenhouse_job(BOARD, "Backend Engineer", "New York, NY", "<p>Payments in Go.</p>")])
-    discover_boards(client, boards, [BOARD], {**READY_SETTINGS, "roles": ["Engineer"]})
-    run_to_completion(client)
-    [job] = client.get("/api/jobs").json()
-    return int(job["id"])
-
-
-def apply(client: TestClient, job_id: int) -> dict[str, Any]:
-    """Apply to the job and wait for tailoring to finish."""
-    response = client.post(f"/api/jobs/{job_id}/apply")
-    assert response.status_code in (200, 202), response.text
-    deadline = time.monotonic() + 60
-    while True:
-        application: dict[str, Any] = client.get(f"/api/applications/{response.json()['id']}").json()
-        if application["status"] != "drafting":
-            return application
-        assert time.monotonic() < deadline, "tailoring never finished"
-        time.sleep(0.05)
-
-
-def pdf_text(pdf: bytes) -> str:
-    return " ".join(" ".join(page.extract_text() or "" for page in PdfReader(io.BytesIO(pdf)).pages).split())
-
-
-def page_count(pdf: bytes) -> int:
-    return len(PdfReader(io.BytesIO(pdf)).pages)
 
 
 def test_applying_tailors_the_resume_and_opens_the_review(

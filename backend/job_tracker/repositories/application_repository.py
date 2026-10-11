@@ -85,6 +85,30 @@ class ApplicationRepository:
             ),
         )
 
+    def update_resume(
+        self,
+        application_id: int,
+        summary: list[str],
+        skills: list[SkillLine],
+        covered_after: list[bool],
+        page_count: int,
+        now: str,
+    ) -> None:
+        self._conn.execute(
+            """
+            UPDATE resume_versions SET summary = ?, skills = ?, covered_after = ?, page_count = ?
+            WHERE application_id = ?
+            """,
+            (
+                json.dumps(summary),
+                json.dumps([asdict(line) for line in skills]),
+                json.dumps(covered_after),
+                page_count,
+                application_id,
+            ),
+        )
+        self._conn.execute("UPDATE applications SET updated_at = ? WHERE id = ?", (now, application_id))
+
     def delete(self, application_id: int) -> None:
         self._conn.execute("DELETE FROM resume_versions WHERE application_id = ?", (application_id,))
         self._conn.execute("DELETE FROM applications WHERE id = ?", (application_id,))

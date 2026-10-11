@@ -1,6 +1,7 @@
 """Applications: Apply tailors my resume for a job in the background, then the application waits for my review."""
 
 import logging
+import os
 import re
 import shutil
 import threading
@@ -15,8 +16,8 @@ from job_tracker.clients.libreoffice import MISSING_MESSAGE, ConversionError, Li
 from job_tracker.database import Database
 from job_tracker.models.application import Application, TailoredResume
 from job_tracker.models.job import Job
-from job_tracker.models.resume import SkillLine
-from job_tracker.services.errors import ConflictError, NotFoundError, SetupIncompleteError
+from job_tracker.models.resume import ResumeVersion, SkillLine
+from job_tracker.services.errors import ConflictError, InvalidRequestError, NotFoundError, SetupIncompleteError
 from job_tracker.services.pricing import estimate_cost
 from job_tracker.services.resume_reader import skill_line
 from job_tracker.services.resume_renderer import render
@@ -47,6 +48,37 @@ def covered(keywords: list[str], text: str) -> list[bool]:
     return [re.search(rf"(?<!\w){re.escape(keyword)}(?!\w)", text, re.I) is not None for keyword in keywords]
 
 
+def _lines(version: ResumeVersion) -> dict[int, SkillLine]:
+    """The Skills paragraphs that list skills, by paragraph index, in order."""
+    texts = [p.text for p in version.paragraphs]
+    return {index: line for index in version.skills_paragraphs or [] if (line := skill_line(texts[index])) is not None}
+
+
+def _edited_lines(master: list[SkillLine], edited: list[list[str]], allowed: list[str]) -> list[SkillLine]:
+    """My edited skills for each line, under the master line's label and in the master list's spelling."""
+    if len(edited) != len(master):
+        lines = "skills line" if len(master) == 1 else "skills lines"
+        raise InvalidRequestError(f"Your resume has {len(master)} {lines}; send the skills for each of them.")
+    spelling = {" ".join(skill.split()).casefold(): skill for skill in allowed}
+    result = []
+    for line, skills in zip(master, edited, strict=True):
+        kept: list[str] = []
+        for skill in skills:
+            name = " ".join(skill.split())
+            if not name:
+                continue
+            if name.casefold() not in spelling:
+                raise InvalidRequestError(
+                    f"“{name}” isn't in your master skills list. Add it on the Resume page first, or remove it."
+                )
+            if spelling[name.casefold()] not in kept:
+                kept.append(spelling[name.casefold()])
+        if not kept:
+            raise InvalidRequestError("Keep at least one skill on each skills line.")
+        result.append(SkillLine(line.label, kept))
+    return result
+
+
 class ApplicationService:
     """Each application's files live in their own directory under `files_dir/applications`."""
 
@@ -66,6 +98,7 @@ class ApplicationService:
         self._tailor = tailor
         self._office = office
         self._apply_lock = threading.Lock()
+        self._edit_lock = threading.Lock()
         with self._db.transaction() as uow:
             uow.applications.fail_drafting(INTERRUPTED, _now())
 
@@ -135,24 +168,64 @@ class ApplicationService:
         with self._db.transaction() as uow:
             uow.applications.set_status(application_id, "failed", _now(), message)
 
+    def edit(self, application_id: int, summary: list[str], skills: list[list[str]]) -> Application:
+        """Regenerate the tailored resume from my edits. The master-list rule still applies; a resume that grew
+        past the master's page count is saved, and the review bundle flags it."""
+        with self._edit_lock:
+            application = self.get(application_id)
+            resume = application.resume
+            if application.status != "in_review" or resume is None:
+                raise ConflictError("Only an application in review can be edited.")
+            version = self._resumes.get(resume.master_version)
+            summary = [" ".join(text.split()) for text in summary if text.strip()]
+            if not summary:
+                raise InvalidRequestError("Write a Summary before regenerating.")
+            lines = _edited_lines(resume.master_skills, skills, version.skills or [])
+            pages, text = self._render(version, summary, lines, self._dir / resume.directory)
+            with self._db.transaction() as uow:
+                uow.applications.update_resume(
+                    application_id, summary, lines, covered(resume.keywords, text), pages, _now()
+                )
+        return self.get(application_id)
+
+    def _render(
+        self, version: ResumeVersion, summary: list[str], skills: list[SkillLine], target: Path
+    ) -> tuple[int, str]:
+        """Write the tailored .docx and PDF into `target`; returns the PDF's page count and the resume's text.
+
+        The files are replaced only once both are made, so a failed conversion leaves the previous ones.
+        """
+        assert version.summary_paragraphs is not None
+        master = self._resumes.file(version.version, MASTER_DOCX).read_bytes()
+        tailored, text = render(
+            master, version.summary_paragraphs, summary, dict(zip(_lines(version), skills, strict=True))
+        )
+        draft = target / f"{uuid.uuid4().hex}.docx"
+        draft.write_bytes(tailored)
+        try:
+            pdf = self._office.convert_to_pdf(draft, target)
+            pages = len(PdfReader(pdf).pages)
+            os.replace(draft, target / TAILORED_DOCX)
+            os.replace(pdf, target / TAILORED_PDF)
+        finally:
+            draft.unlink(missing_ok=True)
+            draft.with_suffix(".pdf").unlink(missing_ok=True)
+        return pages, text
+
     def _tailor_resume(self, application_id: int, job: Job, directory: str) -> TailoredResume:
         ai = self._settings.ai()
         version = self._resumes.current()
         if ai.anthropic_api_key is None or version is None or not version.ready or version.skills is None:
             raise TailoringError("Finish setting up your resume and Anthropic API key first.")
-        assert version.summary_paragraphs is not None and version.skills_paragraphs is not None
+        assert version.summary_paragraphs is not None
         texts = [p.text for p in version.paragraphs]
-        lines: dict[int, SkillLine] = {
-            index: line for index in version.skills_paragraphs if (line := skill_line(texts[index])) is not None
-        }
         request = TailorRequest(
             resume_text="\n".join(text for text in texts if text),
             summary=[texts[index] for index in version.summary_paragraphs],
-            skills=list(lines.values()),
+            skills=list(_lines(version).values()),
             allowed_skills=version.skills,
             job=job,
         )
-        master = self._resumes.file(version.version, MASTER_DOCX).read_bytes()
         target = self._dir / directory
         target.mkdir(parents=True)
 
@@ -160,12 +233,7 @@ class ApplicationService:
         for _ in range(2):
             result = self._tailor.tailor(ai.anthropic_api_key, ai.tailoring_model, request, shorten)
             self._record_usage(application_id, job.id, result)
-            tailored, text = render(
-                master, version.summary_paragraphs, result.summary, dict(zip(lines, result.skills, strict=True))
-            )
-            (target / TAILORED_DOCX).write_bytes(tailored)
-            self._office.convert_to_pdf(target / TAILORED_DOCX, target)
-            pages = len(PdfReader(target / TAILORED_PDF).pages)
+            pages, text = self._render(version, result.summary, result.skills, target)
             if pages <= version.page_count:
                 break
             shorten = Shorten(pages, version.page_count, result.summary)
