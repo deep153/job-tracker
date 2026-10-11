@@ -1,4 +1,4 @@
-import type { FilterRule } from "../types/job";
+import type { FilterRule, Job } from "../types/job";
 import type { Platform } from "../types/searchSettings";
 
 export const PLATFORM_LABELS: Record<Platform, string> = {
@@ -52,6 +52,19 @@ export function companyName(boardId: string): string {
     .split(/[-_]/)
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
+}
+
+export function formatSalary(salary: NonNullable<Job["salary"]>): string {
+  const money = (n: number) =>
+    new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: salary.currency ?? "USD",
+      notation: "compact",
+      maximumFractionDigits: 0,
+    }).format(n);
+  const { min, max } = salary;
+  if (min !== null && max !== null && min !== max) return `${money(min)}–${money(max)}`;
+  return money((max ?? min) as number);
 }
 
 /** An approximate AI cost: cents need more precision than whole dollars do. */

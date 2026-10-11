@@ -27,6 +27,16 @@ export type Job = {
   application_url: string;
   updated_at: string;
   score: FitScore | null;
+  dismissed: boolean;
 };
 
 export type FilteredJob = Job & { rejection: { rule: FilterRule; reason: string } };
+
+export type JobSort = "score" | "posted";
+
+export type JobQuery = {
+  company: string | null;
+  location: string;
+  posted_within_days: number | null;
+  sort: JobSort;
+};

@@ -1,15 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ApiError } from "../api/client";
 import { listCompanies } from "../api/companies";
-import { listFilteredOutJobs, listJobs, listJobsBelowThreshold } from "../api/jobs";
+import { dismissJob, listFilteredOutJobs, listJobs, listJobsBelowThreshold } from "../api/jobs";
 import { getRun, listRuns, startRun } from "../api/runs";
 import { getSearchSettings } from "../api/searchSettings";
 import { CompaniesPanel } from "../components/CompaniesPanel";
 import { AlertIcon, BriefcaseIcon, CheckIcon, ExternalIcon, PinIcon, PlayIcon, SlidersIcon } from "../components/icons";
+import { JobDetail } from "../components/JobDetail";
+import { JobFilters, NO_FILTERS, hasFilters } from "../components/JobFilters";
+import { ScoreBadge, ScoreDetails } from "../components/Score";
 import { SearchSettingsPanel } from "../components/SearchSettingsPanel";
 import { Topbar } from "../components/Topbar";
 import type { Company } from "../types/company";
-import type { FilterRule, FilteredJob, FitScore, Job } from "../types/job";
+import type { FilterRule, FilteredJob, Job, JobQuery } from "../types/job";
 import type { Run } from "../types/run";
 import type { SearchSettings } from "../types/searchSettings";
 import {
@@ -17,12 +20,14 @@ import {
   PLATFORM_LABELS,
   companyName,
   formatCost,
+  formatSalary,
   fullDate,
   timeAgo,
   totalFilteredOut,
 } from "../utils/format";
 
 const POLL_INTERVAL_MS = 700;
+const LOCATION_DEBOUNCE_MS = 300;
 
 type Failure = { message: string; retry: () => void };
 
@@ -38,10 +43,19 @@ export function Dashboard() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [starting, setStarting] = useState(false);
   const [failure, setFailure] = useState<Failure | null>(null);
+  const [query, setQuery] = useState<JobQuery>(NO_FILTERS);
+  const [appliedQuery, setAppliedQuery] = useState<JobQuery>(NO_FILTERS);
+  const appliedQueryRef = useRef(appliedQuery);
+  appliedQueryRef.current = appliedQuery;
+  const jobsRequest = useRef(0);
+  const queryApplied = useRef(false);
+  const [selected, setSelected] = useState<Job | FilteredJob | null>(null);
+  const [dismissed, setDismissed] = useState<string | null>(null);
   const running = starting || run?.status === "running";
   const ready = settings?.ready ?? false;
   const loaded = jobs !== null && below !== null && filtered !== null;
-  const showTabs = loaded && (jobs.length > 0 || below.length > 0 || filtered.length > 0);
+  const filtering = hasFilters(appliedQuery);
+  const showTabs = loaded && (jobs.length > 0 || below.length > 0 || filtered.length > 0 || filtering);
 
   async function load<T>(fetch: () => Promise<T>, apply: (value: T) => void) {
     try {
@@ -51,12 +65,23 @@ export function Dashboard() {
     }
   }
 
-  const loadJobs = () =>
-    Promise.all([
-      load(listJobs, setJobs),
-      load(listJobsBelowThreshold, setBelow),
+  /** Only the latest request's lists are shown, so a slow answer for old filters can't replace a newer one. */
+  async function loadJobs() {
+    const request = ++jobsRequest.current;
+    const current = appliedQueryRef.current;
+    const latest = () => request === jobsRequest.current;
+    await Promise.all([
+      load(
+        () => listJobs(current),
+        (next) => latest() && setJobs(next),
+      ),
+      load(
+        () => listJobsBelowThreshold(current),
+        (next) => latest() && setBelow(next),
+      ),
       load(listFilteredOutJobs, setFiltered),
     ]);
+  }
   const loadCompanies = () => load(listCompanies, setCompanies);
 
   async function loadAll() {
@@ -72,6 +97,21 @@ export function Dashboard() {
   useEffect(() => {
     void loadAll();
   }, []);
+
+  useEffect(() => {
+    const delay = query.location !== appliedQuery.location ? LOCATION_DEBOUNCE_MS : 0;
+    const timer = setTimeout(() => setAppliedQuery(query), delay);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  useEffect(() => {
+    // The first lists come with loadAll.
+    if (!queryApplied.current) {
+      queryApplied.current = true;
+      return;
+    }
+    void loadJobs();
+  }, [appliedQuery]);
 
   useEffect(() => {
     if (run?.status !== "running") return;
@@ -119,6 +159,29 @@ export function Dashboard() {
     void loadJobs();
   }
 
+  function removeDismissed(job: Job | FilteredJob) {
+    const without = <T extends Job>(list: T[] | null) => list && list.filter((j) => j.id !== job.id);
+    setJobs(without);
+    setBelow(without);
+    setFiltered(without);
+    setSelected(null);
+    setDismissed(job.title);
+  }
+
+  async function dismiss(job: Job | FilteredJob) {
+    try {
+      await dismissJob(job.id);
+      removeDismissed(job);
+    } catch (e) {
+      setFailure({ message: `Couldn't dismiss ${job.title}. ${(e as Error).message}`, retry: () => dismiss(job) });
+    }
+  }
+
+  function updateRescored(job: Job | FilteredJob) {
+    setSelected(job);
+    void loadJobs();
+  }
+
   return (
     <div className="app">
       <Topbar page="jobs">
@@ -160,6 +223,17 @@ export function Dashboard() {
           {run?.status === "running" && <RunProgress run={run} />}
           {run && run.status !== "running" && <RunSummary run={run} onReview={() => setView("filtered")} />}
 
+          {dismissed && (
+            <div className="notice notice-muted" role="status">
+              <span className="notice-text">
+                Dismissed <strong>{dismissed}</strong>. It won't come back, even after later runs.
+              </span>
+              <button className="icon-button" onClick={() => setDismissed(null)} aria-label="Close">
+                ×
+              </button>
+            </div>
+          )}
+
           {showTabs && (
             <ViewTabs
               view={view}
@@ -167,6 +241,7 @@ export function Dashboard() {
               onChange={setView}
             />
           )}
+          {showTabs && view !== "filtered" && <JobFilters query={query} companies={companies} onChange={setQuery} />}
           <div
             role={showTabs ? "tabpanel" : undefined}
             id="jobs-panel"
@@ -178,14 +253,20 @@ export function Dashboard() {
               filtered.length === 0 ? (
                 <FilteredEmptyState />
               ) : (
-                <JobList jobs={filtered} />
+                <JobList jobs={filtered} onOpen={setSelected} onDismiss={dismiss} />
               )
             ) : view === "below" ? (
               below.length === 0 ? (
-                <BelowEmptyState threshold={settings?.min_score ?? 70} />
+                filtering ? (
+                  <NoFilterMatches onClear={() => setQuery({ ...NO_FILTERS, sort: query.sort })} />
+                ) : (
+                  <BelowEmptyState threshold={settings?.min_score ?? 70} />
+                )
               ) : (
-                <JobList jobs={below} />
+                <JobList jobs={below} onOpen={setSelected} onDismiss={dismiss} />
               )
+            ) : jobs.length === 0 && filtering ? (
+              <NoFilterMatches onClear={() => setQuery({ ...NO_FILTERS, sort: query.sort })} />
             ) : jobs.length === 0 ? (
               <EmptyState
                 running={running}
@@ -198,11 +279,21 @@ export function Dashboard() {
                 onReview={setView}
               />
             ) : (
-              <JobList jobs={jobs} />
+              <JobList jobs={jobs} onOpen={setSelected} onDismiss={dismiss} />
             )}
           </div>
         </main>
       </div>
+
+      {selected && (
+        <JobDetail
+          key={selected.id}
+          job={selected}
+          onClose={() => setSelected(null)}
+          onRescored={updateRescored}
+          onDismissed={removeDismissed}
+        />
+      )}
     </div>
   );
 }
@@ -224,19 +315,6 @@ function RunButton({ running, ready, onClick }: { running: boolean; ready: boole
 
 function plural(count: number, singular: string, pluralForm = `${singular}s`): string {
   return `${count} ${count === 1 ? singular : pluralForm}`;
-}
-
-function formatSalary(salary: NonNullable<Job["salary"]>): string {
-  const money = (n: number) =>
-    new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: salary.currency ?? "USD",
-      notation: "compact",
-      maximumFractionDigits: 0,
-    }).format(n);
-  const { min, max } = salary;
-  if (min !== null && max !== null && min !== max) return `${money(min)}–${money(max)}`;
-  return money((max ?? min) as number);
 }
 
 /** Setup steps done on another page link to it; the rest are in the Search settings panel. */
@@ -627,17 +705,37 @@ function EmptyState({
   );
 }
 
-function JobList({ jobs }: { jobs: (Job | FilteredJob)[] }) {
+function NoFilterMatches({ onClear }: { onClear: () => void }) {
+  return (
+    <section className="empty">
+      <div className="empty-icon" aria-hidden="true">
+        <SlidersIcon size={28} />
+      </div>
+      <h2>No jobs match these filters</h2>
+      <p>Try another company or location, or a longer time range.</p>
+      <button className="button button-secondary" onClick={onClear}>
+        Clear filters
+      </button>
+    </section>
+  );
+}
+
+type JobActions = {
+  onOpen: (job: Job | FilteredJob) => void;
+  onDismiss: (job: Job | FilteredJob) => void;
+};
+
+function JobList({ jobs, ...actions }: { jobs: (Job | FilteredJob)[] } & JobActions) {
   return (
     <ul className="job-list">
       {jobs.map((job) => (
-        <JobRow key={job.id} job={job} />
+        <JobRow key={job.id} job={job} {...actions} />
       ))}
     </ul>
   );
 }
 
-function JobRow({ job }: { job: Job | FilteredJob }) {
+function JobRow({ job, onOpen, onDismiss }: { job: Job | FilteredJob } & JobActions) {
   const location = job.locations.join(" · ");
   const rejection = "rejection" in job ? job.rejection : null;
   return (
@@ -645,7 +743,9 @@ function JobRow({ job }: { job: Job | FilteredJob }) {
       <div className="job-main">
         <h3 className="job-title">
           {!rejection && <ScoreBadge score={job.score} />}
-          {job.title}
+          <button type="button" className="job-open" onClick={() => onOpen(job)}>
+            {job.title}
+          </button>
         </h3>
         <div className="job-meta">
           <span className="job-company">{companyName(job.company)}</span>
@@ -672,74 +772,23 @@ function JobRow({ job }: { job: Job | FilteredJob }) {
       <time className="job-updated" dateTime={job.updated_at} title={`Updated ${fullDate(job.updated_at)}`}>
         Updated {timeAgo(job.updated_at)}
       </time>
-      <a className="button button-secondary job-link" href={job.posting_url} target="_blank" rel="noreferrer">
-        View posting
-        <ExternalIcon />
-        <span className="visually-hidden">(opens in a new tab)</span>
-      </a>
+      <div className="job-actions">
+        <a className="button button-secondary job-link" href={job.posting_url} target="_blank" rel="noreferrer">
+          View posting
+          <ExternalIcon />
+          <span className="visually-hidden">(opens in a new tab)</span>
+        </a>
+        <button
+          type="button"
+          className="icon-button job-dismiss"
+          onClick={() => onDismiss(job)}
+          aria-label={`Dismiss ${job.title}`}
+          title="Dismiss: hide this job for good"
+        >
+          ×
+        </button>
+      </div>
     </li>
-  );
-}
-
-function scoreLevel(score: number): string {
-  if (score >= 85) return "excellent";
-  if (score >= 70) return "good";
-  if (score >= 50) return "fair";
-  return "poor";
-}
-
-function ScoreBadge({ score }: { score: FitScore | null }) {
-  if (score === null) {
-    return (
-      <span className="score score-none" title="Scored on the next run">
-        <span className="visually-hidden">Not scored yet</span>
-        <span aria-hidden="true">–</span>
-      </span>
-    );
-  }
-  return (
-    <span
-      className={`score score-${scoreLevel(score.score)}`}
-      title={`Fit score ${score.score} of 100, by ${score.model}, ${timeAgo(score.scored_at)}`}
-    >
-      <span className="visually-hidden">Fit score </span>
-      {score.score}
-    </span>
-  );
-}
-
-function ScoreDetails({ score }: { score: FitScore }) {
-  return (
-    <div className="score-details">
-      {score.reasons.length > 0 && (
-        <ul className="score-reasons">
-          {score.reasons.map((reason) => (
-            <li key={reason}>{reason}</li>
-          ))}
-        </ul>
-      )}
-      {(score.matched_keywords.length > 0 || score.missing_keywords.length > 0) && (
-        <div className="keywords">
-          {score.matched_keywords.length > 0 && (
-            <span className="visually-hidden">Matched keywords: {score.matched_keywords.join(", ")}.</span>
-          )}
-          {score.matched_keywords.map((keyword) => (
-            <span className="keyword keyword-matched" key={`m-${keyword}`} aria-hidden="true">
-              <CheckIcon />
-              {keyword}
-            </span>
-          ))}
-          {score.missing_keywords.length > 0 && (
-            <span className="visually-hidden">Missing keywords: {score.missing_keywords.join(", ")}.</span>
-          )}
-          {score.missing_keywords.map((keyword) => (
-            <span className="keyword keyword-missing" key={`x-${keyword}`} aria-hidden="true" title="Not on your resume">
-              {keyword}
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
   );
 }
 
