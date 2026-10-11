@@ -14,12 +14,21 @@ class LLMCall:
     prompt: str
     schema: dict[str, Any]
 
+    @property
+    def is_tailoring(self) -> bool:
+        return "summary" in self.schema.get("properties", {})
+
+
+DEFAULT_TAILORED_SUMMARY = "Backend engineer who builds reliable payment APIs in Python and Go."
+
 
 class FakeLLM:
     """Answers with scripted structured outputs instead of calling Claude.
 
     Scoring prompts are answered by the job's title (the prompt's "Title: ..." line): a fit score of 80 with
     stock reasons and keywords unless `score` or `answer` scripted something else for that title.
+    Tailoring prompts get the answers queued with `tailor`, in order, then a stock answer that rewrites the
+    summary and leaves the skills lines as they are.
     """
 
     INPUT_TOKENS = 1000
@@ -27,6 +36,7 @@ class FakeLLM:
 
     def __init__(self) -> None:
         self._answers: dict[str, dict[str, Any] | LLMError] = {}
+        self._tailorings: list[dict[str, Any] | LLMError] = []
         self._failure: LLMError | None = None
         self._lock = threading.Lock()
         self.calls: list[LLMCall] = []
@@ -43,23 +53,34 @@ class FakeLLM:
         """Answer with exactly this output (or raise this error) for jobs with this title."""
         self._answers[title] = answer
 
+    def tailor(self, *answers: dict[str, Any] | LLMError) -> None:
+        """Answer the next tailoring prompts with these outputs (or raise these errors), in order."""
+        self._tailorings.extend(answers)
+
     def fail(self, error: LLMError | None) -> None:
         """Every call raises `error` from now on (or, given None, answers normally again)."""
         self._failure = error
 
     def scored_titles(self) -> list[str]:
-        return sorted(_title(call.prompt) for call in self.calls)
+        return sorted(_title(call.prompt) for call in self.calls if not call.is_tailoring)
+
+    def tailoring_calls(self) -> list[LLMCall]:
+        return [call for call in self.calls if call.is_tailoring]
 
     def generate(
         self, *, api_key: str, model: str, system: str, prompt: str, schema: dict[str, Any], max_tokens: int
     ) -> LLMResponse:
+        call = LLMCall(api_key, model, system, prompt, schema)
         with self._lock:
-            self.calls.append(LLMCall(api_key, model, system, prompt, schema))
+            self.calls.append(call)
+            tailored = self._tailorings.pop(0) if call.is_tailoring and self._tailorings else None
         if self._failure is not None:
             raise self._failure
-        answer = self._answers.get(_title(prompt))
+        answer = tailored if call.is_tailoring else self._answers.get(_title(prompt))
         if isinstance(answer, LLMError):
             raise answer
+        if answer is None and call.is_tailoring:
+            answer = {"summary": [DEFAULT_TAILORED_SUMMARY], "skills": [], "keywords": ["Python", "Kafka"]}
         if answer is None:
             answer = {
                 "score": 80,

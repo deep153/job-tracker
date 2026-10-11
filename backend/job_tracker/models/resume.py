@@ -41,6 +41,14 @@ class ResumeVersion:
 
 
 @dataclass(frozen=True)
+class SkillLine:
+    """One line of the Skills section: an optional label ("Languages") and the skills it lists, in order."""
+
+    label: str | None
+    skills: list[str]
+
+
+@dataclass(frozen=True)
 class MasterResume:
     """The current resume version as the AI sees it."""
 

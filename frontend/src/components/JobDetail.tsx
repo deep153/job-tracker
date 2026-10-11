@@ -1,11 +1,12 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
+import { applyToJob } from "../api/applications";
 import { dismissJob, rescoreJob } from "../api/jobs";
 import type { FilteredJob, Job } from "../types/job";
 import { FILTER_LABELS, PLATFORM_LABELS, companyName, formatSalary, fullDate, timeAgo } from "../utils/format";
 import { AlertIcon, ExternalIcon, PinIcon } from "./icons";
 import { ScoreBadge, ScoreDetails } from "./Score";
 
-type Action = "rescore" | "dismiss";
+type Action = "apply" | "rescore" | "dismiss";
 
 export function JobDetail({
   job,
@@ -23,6 +24,7 @@ export function JobDetail({
   const [error, setError] = useState<string | null>(null);
   const rejection = "rejection" in job ? job.rejection : null;
   const location = job.locations.join(" · ");
+  const openApplication = job.application?.status === "failed" ? null : job.application;
 
   useEffect(() => {
     dialog.current?.showModal();
@@ -32,14 +34,17 @@ export function JobDetail({
     setBusy(action);
     setError(null);
     try {
-      if (action === "rescore") {
+      if (action === "apply") {
+        const application = await applyToJob(job.id);
+        window.location.hash = `#/applications/${application.id}`;
+      } else if (action === "rescore") {
         onRescored(await rescoreJob(job.id));
       } else {
         await dismissJob(job.id);
         onDismissed(job);
       }
     } catch (e) {
-      const verb = action === "rescore" ? "re-score" : "dismiss";
+      const verb = { apply: "apply to", rescore: "re-score", dismiss: "dismiss" }[action];
       setError(`Couldn't ${verb} this job. ${(e as Error).message}`);
     } finally {
       setBusy(null);
@@ -91,7 +96,24 @@ export function JobDetail({
         </header>
 
         <div className="job-detail-actions">
-          <a className="button button-primary" href={job.posting_url} target="_blank" rel="noreferrer">
+          {openApplication ? (
+            <a className="button button-primary" href={`#/applications/${openApplication.id}`}>
+              {openApplication.status === "drafting" ? "View tailoring progress" : "Review application"}
+            </a>
+          ) : (
+            <button
+              type="button"
+              className="button button-primary"
+              onClick={() => act("apply")}
+              disabled={busy !== null}
+              aria-busy={busy === "apply"}
+              title="Tailor your resume for this job, then review it before anything is sent"
+            >
+              {busy === "apply" && <span className="spinner" aria-hidden="true" />}
+              {busy === "apply" ? "Starting…" : "Apply"}
+            </button>
+          )}
+          <a className="button button-secondary" href={job.posting_url} target="_blank" rel="noreferrer">
             View original posting
             <ExternalIcon />
             <span className="visually-hidden">(opens in a new tab)</span>

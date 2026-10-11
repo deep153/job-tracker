@@ -16,9 +16,10 @@ SKILL_LINES = [
 ]
 
 
-def sample_resume(summary: str = SUMMARY, pages: int = 1) -> bytes:
+def sample_resume(summary: str = SUMMARY, pages: int = 1, bold_labels: bool = False) -> bytes:
     """A resume laid out the way real ones are: a title, headings, labelled skill lines, a table row for a
-    job's title and dates, and bullet points. Extra pages repeat the experience section after a page break."""
+    job's title and dates, and bullet points. Extra pages repeat the experience section after a page break.
+    With `bold_labels`, each skill line's label ("Languages:") is a bold run of its own."""
     document = docx.Document()
     document.add_heading("Jordan Rivera", level=0)
     contact = document.add_paragraph("Brooklyn, NY · jordan@example.com · github.com/jrivera")
@@ -27,7 +28,13 @@ def sample_resume(summary: str = SUMMARY, pages: int = 1) -> bytes:
     document.add_paragraph(summary)
     document.add_heading("Skills", level=1)
     for line in SKILL_LINES:
-        document.add_paragraph(line)
+        if bold_labels:
+            label, items = line.split(": ", 1)
+            paragraph = document.add_paragraph()
+            paragraph.add_run(f"{label}: ").bold = True
+            paragraph.add_run(items)
+        else:
+            document.add_paragraph(line)
     document.add_paragraph()
     for page in range(pages):
         if page > 0:
@@ -63,9 +70,9 @@ def mapping_for(resume: dict[str, Any], summary: str = SUMMARY) -> dict[str, lis
     return {"summary": [index_of(resume, summary)], "skills": [index_of(resume, line) for line in SKILL_LINES]}
 
 
-def add_ready_resume(client: TestClient, summary: str = SUMMARY) -> dict[str, Any]:
+def add_ready_resume(client: TestClient, summary: str = SUMMARY, bold_labels: bool = False) -> dict[str, Any]:
     """Upload the sample resume and mark its Summary and Skills, so it can be scored against."""
-    uploaded = upload(client, sample_resume(summary))
+    uploaded = upload(client, sample_resume(summary, bold_labels=bold_labels))
     assert uploaded.status_code == 201, uploaded.text
     mapped = client.put("/api/resume/mapping", json=mapping_for(uploaded.json(), summary))
     assert mapped.status_code == 200, mapped.text

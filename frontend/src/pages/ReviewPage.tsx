@@ -1,0 +1,371 @@
+import { useEffect, useState } from "react";
+import { applyToJob, cancelApplication, getApplication } from "../api/applications";
+import { AlertIcon, CheckIcon, DownloadIcon, ExternalIcon } from "../components/icons";
+import { ScoreBadge } from "../components/Score";
+import { Topbar } from "../components/Topbar";
+import type { Application, SkillLine, TailoredResume } from "../types/application";
+import { companyName, formatCost } from "../utils/format";
+
+const POLL_MS = 1500;
+
+function pages(count: number): string {
+  return `${count} ${count === 1 ? "page" : "pages"}`;
+}
+
+export function ReviewPage({ id }: { id: number }) {
+  const [application, setApplication] = useState<Application | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const drafting = application?.status === "drafting";
+
+  useEffect(() => {
+    let cancelled = false;
+    getApplication(id).then(
+      (a) => !cancelled && setApplication(a),
+      (e: Error) => !cancelled && setLoadError(e.message),
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  useEffect(() => {
+    if (!drafting) return;
+    const timer = window.setInterval(() => {
+      getApplication(id).then(setApplication, () => {});
+    }, POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [id, drafting]);
+
+  return (
+    <div className="app">
+      <Topbar page="jobs" />
+      <main className="page">
+        <a className="back-link" href="#/">
+          ← Jobs
+        </a>
+        <div className="page-heading">
+          <h1>Review application</h1>
+          {application && (
+            <p className="subtitle review-job">
+              <ScoreBadge score={application.job.score} />
+              <span>
+                <strong>{application.job.title}</strong> at {companyName(application.job.company)}
+              </span>
+            </p>
+          )}
+        </div>
+
+        {loadError && (
+          <div className="notice notice-error" role="alert">
+            <AlertIcon />
+            <span className="notice-text">{loadError}</span>
+            <a className="button button-ghost" href="#/">
+              Back to jobs
+            </a>
+          </div>
+        )}
+        {!application && !loadError && <div className="skeleton resume-skeleton" aria-busy="true" aria-label="Loading" />}
+        {application?.status === "drafting" && <Drafting application={application} />}
+        {application?.status === "failed" && <Failed application={application} />}
+        {application?.status === "in_review" && application.resume && (
+          <InReview application={application} resume={application.resume} />
+        )}
+      </main>
+    </div>
+  );
+}
+
+function Drafting({ application }: { application: Application }) {
+  return (
+    <section className="panel review-status" aria-live="polite">
+      <span className="spinner spinner-dark" aria-hidden="true" />
+      <div>
+        <h2 className="panel-title">Tailoring your resume…</h2>
+        <p className="panel-empty">
+          Claude is rewriting your Summary and reordering your Skills for this job. Then the resume is converted to PDF
+          and checked to still fit on the same number of pages. This usually takes under a minute.
+        </p>
+      </div>
+      <CancelButton application={application} />
+    </section>
+  );
+}
+
+function Failed({ application }: { application: Application }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function retry() {
+    setBusy(true);
+    setError(null);
+    try {
+      const next = await applyToJob(application.job.id);
+      window.location.hash = `#/applications/${next.id}`;
+    } catch (e) {
+      setError((e as Error).message);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <div className="notice notice-error" role="alert">
+        <AlertIcon />
+        <span className="notice-text">
+          <strong>Tailoring failed.</strong> {application.error}
+        </span>
+      </div>
+      {error && (
+        <div className="notice notice-error" role="alert">
+          <AlertIcon />
+          <span className="notice-text">Couldn't try again. {error}</span>
+        </div>
+      )}
+      <div className="review-actions">
+        <button type="button" className="button button-primary" onClick={retry} disabled={busy} aria-busy={busy}>
+          {busy && <span className="spinner" aria-hidden="true" />}
+          Try again
+        </button>
+        <a className="button button-ghost" href="#/">
+          Back to jobs
+        </a>
+        {application.cost_usd > 0 && <CostNote usd={application.cost_usd} />}
+      </div>
+    </>
+  );
+}
+
+function InReview({ application, resume }: { application: Application; resume: TailoredResume }) {
+  return (
+    <>
+      <div className="review-actions">
+        <CancelButton application={application} />
+        <CostNote usd={application.cost_usd} />
+      </div>
+      <div className="resume-layout">
+        <div className="resume-main">
+          <SummaryDiff master={resume.summary.master} tailored={resume.summary.tailored} />
+          <SkillsDiff master={resume.skills.master} tailored={resume.skills.tailored} />
+          <Coverage coverage={resume.coverage} />
+        </div>
+        <section className="panel resume-preview-panel" aria-labelledby="preview-heading">
+          <div className="panel-header">
+            <h2 className="panel-title" id="preview-heading">
+              Tailored PDF
+            </h2>
+            <span className="count count-small" title={`Your master is ${pages(resume.master_page_count)}`}>
+              {pages(resume.page_count)}
+            </span>
+            <a className="button button-ghost" href={resume.docx_url} download>
+              <DownloadIcon />
+              .docx
+            </a>
+            <a className="button button-ghost" href={resume.pdf_url} target="_blank" rel="noreferrer">
+              Open
+              <ExternalIcon />
+              <span className="visually-hidden">(opens in a new tab)</span>
+            </a>
+          </div>
+          <iframe
+            className="resume-preview"
+            src={`${resume.pdf_url}#view=FitH&navpanes=0`}
+            title="PDF preview of the tailored resume"
+          />
+        </section>
+      </div>
+    </>
+  );
+}
+
+function CostNote({ usd }: { usd: number }) {
+  return <span className="review-cost">Tailoring cost about {formatCost(usd)}</span>;
+}
+
+function CancelButton({ application }: { application: Application }) {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function cancel() {
+    setBusy(true);
+    setError(null);
+    try {
+      await cancelApplication(application.id);
+      window.location.hash = "#/";
+    } catch (e) {
+      setError((e as Error).message);
+      setBusy(false);
+    }
+  }
+
+  if (!confirming) {
+    return (
+      <button type="button" className="button button-secondary" onClick={() => setConfirming(true)}>
+        Cancel application
+      </button>
+    );
+  }
+  return (
+    <div className="review-confirm" role="group" aria-label="Confirm cancelling">
+      <span>Discard this application? Nothing has been sent.</span>
+      <button type="button" className="button button-danger" onClick={cancel} disabled={busy} aria-busy={busy}>
+        Discard
+      </button>
+      <button type="button" className="button button-ghost" onClick={() => setConfirming(false)} disabled={busy}>
+        Keep
+      </button>
+      {error && (
+        <span className="review-confirm-error" role="alert">
+          {error}
+        </span>
+      )}
+    </div>
+  );
+}
+
+type Segment = { text: string; changed: boolean };
+
+/** Word-level diff: the words each side has that the other doesn't, by longest common subsequence. */
+function diffWords(before: string, after: string): { before: Segment[]; after: Segment[] } {
+  const a = before.split(/\s+/).filter(Boolean);
+  const b = after.split(/\s+/).filter(Boolean);
+  const lcs = Array.from({ length: a.length + 1 }, () => new Array<number>(b.length + 1).fill(0));
+  for (let i = a.length - 1; i >= 0; i--) {
+    for (let j = b.length - 1; j >= 0; j--) {
+      lcs[i][j] = a[i] === b[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+    }
+  }
+  const left: Segment[] = [];
+  const right: Segment[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < a.length || j < b.length) {
+    if (i < a.length && j < b.length && a[i] === b[j]) {
+      left.push({ text: a[i++], changed: false });
+      right.push({ text: b[j++], changed: false });
+    } else if (j < b.length && (i === a.length || lcs[i][j + 1] >= lcs[i + 1][j])) {
+      right.push({ text: b[j++], changed: true });
+    } else {
+      left.push({ text: a[i++], changed: true });
+    }
+  }
+  return { before: left, after: right };
+}
+
+function Words({ segments, kind }: { segments: Segment[]; kind: "removed" | "added" }) {
+  return (
+    <>
+      {segments.map((s, i) => (
+        <span key={i}>
+          {i > 0 && " "}
+          {s.changed ? <mark className={`diff-${kind}`}>{s.text}</mark> : s.text}
+        </span>
+      ))}
+    </>
+  );
+}
+
+function SummaryDiff({ master, tailored }: { master: string[]; tailored: string[] }) {
+  const diff = diffWords(master.join("\n"), tailored.join("\n"));
+  return (
+    <section className="panel" aria-labelledby="summary-heading">
+      <div className="panel-header">
+        <h2 className="panel-title" id="summary-heading">
+          Summary
+        </h2>
+      </div>
+      <div className="diff-columns">
+        <div className="diff-side">
+          <h3 className="diff-side-title">Master</h3>
+          <p>
+            <Words segments={diff.before} kind="removed" />
+          </p>
+        </div>
+        <div className="diff-side">
+          <h3 className="diff-side-title">Tailored</h3>
+          <p>
+            <Words segments={diff.after} kind="added" />
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function SkillsDiff({ master, tailored }: { master: SkillLine[]; tailored: SkillLine[] }) {
+  const key = (s: string) => s.toLowerCase();
+  return (
+    <section className="panel" aria-labelledby="skills-heading">
+      <div className="panel-header">
+        <h2 className="panel-title" id="skills-heading">
+          Skills
+        </h2>
+        <span className="diff-legend">
+          <mark className="diff-added">added</mark> <mark className="diff-removed">left out</mark>
+        </span>
+      </div>
+      <div className="diff-columns">
+        {(["Master", "Tailored"] as const).map((side) => (
+          <div className="diff-side" key={side}>
+            <h3 className="diff-side-title">{side}</h3>
+            {(side === "Master" ? master : tailored).map((line, index) => {
+              const other = new Set((side === "Master" ? tailored : master)[index]?.skills.map(key) ?? []);
+              return (
+                <p className="diff-skill-line" key={index}>
+                  {line.label && <span className="diff-skill-label">{line.label}:</span>}
+                  {line.skills.map((skill) => {
+                    const changed = !other.has(key(skill));
+                    const kind = side === "Master" ? "removed" : "added";
+                    return (
+                      <span key={skill} className={`skill${changed ? ` diff-${kind}` : ""}`}>
+                        {skill}
+                      </span>
+                    );
+                  })}
+                </p>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function Coverage({ coverage }: { coverage: TailoredResume["coverage"] }) {
+  const percent = (n: number) => (coverage.total ? Math.round((n / coverage.total) * 100) : 0);
+  return (
+    <section className="panel" aria-labelledby="coverage-heading">
+      <div className="panel-header">
+        <h2 className="panel-title" id="coverage-heading">
+          Keyword coverage
+        </h2>
+      </div>
+      <div className="panel-body">
+        <p className="coverage-numbers">
+          <span>
+            <strong>{coverage.before}</strong> of {coverage.total} before ({percent(coverage.before)}%)
+          </span>
+          <span aria-hidden="true">→</span>
+          <span>
+            <strong>{coverage.after}</strong> of {coverage.total} after ({percent(coverage.after)}%)
+          </span>
+        </p>
+        <p className="panel-empty">The posting's key skills and qualifications your resume mentions.</p>
+        <div className="keywords">
+          {coverage.keywords.map((k) => (
+            <span
+              key={k.keyword}
+              className={`keyword ${k.after ? "keyword-matched" : "keyword-missing"}`}
+              title={k.before ? "Already in your master resume" : k.after ? "Added by tailoring" : "Not in your resume"}
+            >
+              {k.after && <CheckIcon />}
+              {k.keyword}
+              {!k.before && k.after && <span className="keyword-new">new</span>}
+            </span>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}

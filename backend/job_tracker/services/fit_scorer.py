@@ -54,7 +54,7 @@ def build_prompt(resume: MasterResume, settings: SearchSettings, job: Job) -> st
         [
             f"<resume>\n{resume.text}\n\nSkills: {', '.join(resume.skills)}\n</resume>",
             f"<preferences>\n{_preferences(settings)}\n</preferences>",
-            f"<job>\n{_job_text(job)}\n</job>",
+            f"<job>\n{job_text(job)}\n</job>",
             "How well does this job fit me?",
         ]
     )
@@ -76,7 +76,8 @@ def _preferences(settings: SearchSettings) -> str:
     return "\n".join(lines)
 
 
-def _job_text(job: Job) -> str:
+def job_text(job: Job) -> str:
+    """The posting as the AI reads it: title, company, place and pay, then the description."""
     posting = job.posting
     lines = [f"Title: {posting.title}", f"Company: {posting.board_id}"]
     if posting.locations:

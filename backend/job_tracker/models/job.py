@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Literal
 
+from job_tracker.models.application import ApplicationRef
 from job_tracker.models.posting import Posting
 
 Rule = Literal["role", "excluded_keyword", "location", "seniority", "experience", "sponsorship", "salary"]
@@ -55,6 +56,7 @@ class Job:
     rejection: Rejection | None
     score: FitScore | None = None
     dismissed: bool = False
+    application: ApplicationRef | None = None
 
 
 @dataclass(frozen=True)

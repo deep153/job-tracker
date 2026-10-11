@@ -1,6 +1,7 @@
 import json
 import sqlite3
 
+from job_tracker.models.application import ApplicationRef
 from job_tracker.models.job import FitScore, Job, JobQuery, JobSort, Rejection
 from job_tracker.models.posting import Posting, SalaryRange
 
@@ -10,12 +11,16 @@ _LATEST_SCORES = """
     JOIN (SELECT job_id, MAX(id) AS id FROM scores GROUP BY job_id) AS newest ON newest.id = scores.id
 """
 
-# Jobs with their latest score.
+# Jobs with their latest score and latest application.
 _SCORED = f"""
     SELECT jobs.*, latest.id AS score_id, latest.score, latest.reasons, latest.matched_keywords,
-        latest.missing_keywords, latest.model, latest.resume_version, latest.scored_at
+        latest.missing_keywords, latest.model, latest.resume_version, latest.scored_at,
+        application.id AS application_id, application.status AS application_status
     FROM jobs
     LEFT JOIN ({_LATEST_SCORES}) AS latest ON latest.job_id = jobs.id
+    LEFT JOIN applications AS application ON application.id = (
+        SELECT MAX(id) FROM applications WHERE applications.job_id = jobs.id
+    )
 """
 
 # Open jobs I haven't dismissed, at companies that aren't blocked, with their latest score.
@@ -205,7 +210,14 @@ def _job(row: sqlite3.Row) -> Job:
         rejection=rejection,
         score=_score(row),
         dismissed=bool(row["dismissed"]),
+        application=_application(row),
     )
+
+
+def _application(row: sqlite3.Row) -> ApplicationRef | None:
+    if "application_id" not in row.keys() or row["application_id"] is None:
+        return None
+    return ApplicationRef(row["application_id"], row["application_status"])
 
 
 def _score(row: sqlite3.Row) -> FitScore | None:

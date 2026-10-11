@@ -10,7 +10,7 @@ from docx.document import Document
 from docx.styles.style import ParagraphStyle
 from docx.text.paragraph import Paragraph
 
-from job_tracker.models.resume import ParagraphInfo
+from job_tracker.models.resume import ParagraphInfo, SkillLine
 from job_tracker.services.errors import InvalidRequestError, TooLargeError
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
@@ -109,14 +109,36 @@ def skills_from_text(texts: list[str]) -> list[str]:
     """The skills listed in the Skills section's paragraphs, in order, without duplicates."""
     skills: list[str] = []
     for text in texts:
-        text = text.strip()
-        if not text or _SKILLS_HEADING.match(text):
-            continue
-        if label := _LABEL.match(text):
-            text = label[2]
-        for item in _split_top_level(text):
-            add_skill(skills, item)
+        if line := skill_line(text):
+            for skill in line.skills:
+                add_skill(skills, skill)
     return skills
+
+
+def skill_line(text: str) -> SkillLine | None:
+    """The label and skills one Skills paragraph lists, or None for a heading or a line without skills."""
+    text = text.strip()
+    if not text or _SKILLS_HEADING.match(text):
+        return None
+    label = None
+    if match := _LABEL.match(text):
+        label, text = match[1].strip(), match[2]
+    skills: list[str] = []
+    for item in _split_top_level(text):
+        add_skill(skills, item)
+    return SkillLine(label, skills) if skills else None
+
+
+def separator(text: str) -> str:
+    """How a line of skills separates them ("Python, Go" -> ", "), for writing a reordered line the same way."""
+    depth = 0
+    for char in text:
+        depth += (char in "([{") - (char in ")]}")
+        if char in _SEPARATORS and depth <= 0:
+            if char in ",;":
+                return f"{char} "
+            return "\t" if char == "\t" else f" {char} "
+    return ", "
 
 
 def add_skill(skills: list[str], item: str) -> None:

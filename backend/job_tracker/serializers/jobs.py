@@ -25,6 +25,7 @@ def job_json(job: Job) -> dict[str, Any]:
         "updated_at": posting.updated_at,
         "score": None if job.score is None else asdict(job.score),
         "dismissed": job.dismissed,
+        "application": None if job.application is None else asdict(job.application),
     }
 
 
