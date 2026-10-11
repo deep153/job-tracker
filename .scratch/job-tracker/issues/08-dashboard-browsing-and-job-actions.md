@@ -4,13 +4,15 @@
 
 **Blocked by:** 07 (Fit Scorer and matches dashboard)
 
-**Status:** ready-for-agent
+**Status:** done (ca10bd1)
 
-- [ ] Jobs list supports filtering by company, location and posted date, and sorting by score and posted date
-- [ ] Job detail shows the full description, score, reasons, matched/missing keywords and a link to the original posting
-- [ ] Dismissing a job removes it from the dashboard permanently, including after later runs
-- [ ] Unacted matched jobs remain on the dashboard across runs until dismissed or closed
-- [ ] Re-scoring a job calls the LLM once against the current master resume version and replaces the displayed score
-- [ ] Test: a dismissed job does not reappear after another run
-- [ ] Test: a matched job from run 1 is still listed after run 2 if it is still open
-- [ ] Test: re-scoring after replacing the master resume stores a score tied to the new resume version
+- [x] Jobs list supports filtering by company, location and posted date, and sorting by score and posted date
+- [x] Job detail shows the full description, score, reasons, matched/missing keywords and a link to the original posting
+- [x] Dismissing a job removes it from the dashboard permanently, including after later runs
+- [x] Unacted matched jobs remain on the dashboard across runs until dismissed or closed
+- [x] Re-scoring a job calls the LLM once against the current master resume version and replaces the displayed score
+- [x] Test: a dismissed job does not reappear after another run
+- [x] Test: a matched job from run 1 is still listed after run 2 if it is still open
+- [x] Test: re-scoring after replacing the master resume stores a score tied to the new resume version
+
+"Posted date" is the posting's last-updated date, the only date the job boards give; the dashboard labels it "Updated".
