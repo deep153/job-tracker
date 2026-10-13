@@ -6,16 +6,21 @@ from fastapi.testclient import TestClient
 from pypdf import PdfReader
 
 from tests.support.api import READY_SETTINGS, discover_boards, run_to_completion
+from tests.support.fake_forms import form_url
 from tests.support.fake_job_boards import FakeJobBoards, greenhouse_job
 from tests.support.resumes import add_ready_resume
 
 BOARD = "globex"
 
 
-def scored_job(client: TestClient, boards: FakeJobBoards, bold_labels: bool = False) -> int:
-    """A ready resume and one scored job to apply to; returns the job's id."""
+def scored_job(
+    client: TestClient, boards: FakeJobBoards, bold_labels: bool = False, form: str = "greenhouse.html"
+) -> int:
+    """A ready resume and one scored job to apply to, whose application form is the local fake page `form`;
+    returns the job's id."""
     add_ready_resume(client, bold_labels=bold_labels)
-    boards.serve_jobs(BOARD, [greenhouse_job(BOARD, "Backend Engineer", "New York, NY", "<p>Payments in Go.</p>")])
+    job = greenhouse_job(BOARD, "Backend Engineer", "New York, NY", "<p>Payments in Go.</p>", url=form_url(form))
+    boards.serve_jobs(BOARD, [job])
     discover_boards(client, boards, [BOARD], {**READY_SETTINGS, "roles": ["Engineer"]})
     run_to_completion(client)
     [job] = client.get("/api/jobs").json()

@@ -7,7 +7,17 @@ from fastapi import FastAPI
 from job_tracker.clients.claude import LLM
 from job_tracker.clients.libreoffice import LibreOffice
 from job_tracker.container import build_services
-from job_tracker.routes import applications, companies, jobs, resume, runs, search_settings, settings, status
+from job_tracker.routes import (
+    answer_bank,
+    applications,
+    companies,
+    jobs,
+    resume,
+    runs,
+    search_settings,
+    settings,
+    status,
+)
 from job_tracker.routes.errors import register_error_handlers
 
 
@@ -15,7 +25,7 @@ def create_app(db_path: Path, http: httpx.Client, office: LibreOffice | None = N
     app = FastAPI(title="Job Tracker")
     app.state.services = build_services(db_path, http, office, llm)
     register_error_handlers(app)
-    for module in (status, resume, search_settings, settings, runs, companies, jobs, applications):
+    for module in (status, resume, search_settings, settings, runs, companies, jobs, applications, answer_bank):
         app.include_router(module.router)
     return app
 

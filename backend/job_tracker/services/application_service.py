@@ -6,17 +6,22 @@ import re
 import shutil
 import threading
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
 from pypdf import PdfReader
 
 from job_tracker.clients.claude import LLMError
+from job_tracker.clients.forms import FormError, FormSubmitter
 from job_tracker.clients.libreoffice import MISSING_MESSAGE, ConversionError, LibreOffice
 from job_tracker.database import Database
+from job_tracker.models.answers import FormAnswer
 from job_tracker.models.application import Application, TailoredResume
 from job_tracker.models.job import Job
+from job_tracker.models.platform import PLATFORM_NAMES, Platform
 from job_tracker.models.resume import ResumeVersion, SkillLine
+from job_tracker.services.answer_engine import draft_answers, exact_choice
 from job_tracker.services.errors import ConflictError, InvalidRequestError, NotFoundError, SetupIncompleteError
 from job_tracker.services.pricing import estimate_cost
 from job_tracker.services.resume_reader import skill_line
@@ -46,6 +51,28 @@ def _now() -> str:
 def covered(keywords: list[str], text: str) -> list[bool]:
     """Which keywords the text mentions, as whole words and ignoring case."""
     return [re.search(rf"(?<!\w){re.escape(keyword)}(?!\w)", text, re.I) is not None for keyword in keywords]
+
+
+@dataclass(frozen=True)
+class _Form:
+    answers: list[FormAnswer] | None
+    used: set[int]
+    error: str | None
+
+
+def _typed(current: FormAnswer, text: str | None) -> FormAnswer:
+    field = current.field
+    if field.kind == "file":
+        if current.source == "resume":
+            raise InvalidRequestError(f"“{field.label}” is filled with your tailored resume.")
+        raise InvalidRequestError(f"Uploading a file for “{field.label}” isn't supported yet.")
+    text = (text or "").strip()
+    if not text:
+        return current.answered(None, "none")
+    answer = exact_choice(text, field)
+    if answer is None:
+        raise InvalidRequestError(f"Pick one of the options for “{field.label}”.")
+    return current.answered(answer, "you")
 
 
 def _lines(version: ResumeVersion) -> dict[int, SkillLine]:
@@ -90,6 +117,7 @@ class ApplicationService:
         resumes: ResumeService,
         tailor: ResumeTailor,
         office: LibreOffice,
+        forms: dict[Platform, FormSubmitter],
     ) -> None:
         self._db = db
         self._dir = files_dir / "applications"
@@ -97,6 +125,7 @@ class ApplicationService:
         self._resumes = resumes
         self._tailor = tailor
         self._office = office
+        self._forms = forms
         self._apply_lock = threading.Lock()
         self._edit_lock = threading.Lock()
         with self._db.transaction() as uow:
@@ -148,8 +177,9 @@ class ApplicationService:
     def _tailor_in_background(self, application_id: int, job: Job) -> None:
         directory = uuid.uuid4().hex
         try:
+            form = self._read_form(job)
             resume = self._tailor_resume(application_id, job, directory)
-        except (LLMError, TailoringError, ConversionError) as error:
+        except (LLMError, TailoringError, ConversionError, FormError) as error:
             self._fail(application_id, directory, error.message)
             return
         except Exception as error:
@@ -160,8 +190,45 @@ class ApplicationService:
             saved = uow.applications.set_status(application_id, "in_review", _now())
             if saved:
                 uow.applications.save_resume(application_id, job.id, resume, _now())
+                uow.applications.save_answers(application_id, form.answers, form.error, _now())
+                uow.answer_bank.mark_used(form.used, _now())
         if not saved:
             shutil.rmtree(self._dir / directory, ignore_errors=True)
+
+    def _read_form(self, job: Job) -> _Form:
+        submitter = self._forms.get(job.posting.platform)
+        if submitter is None:
+            name = PLATFORM_NAMES[job.posting.platform]
+            return _Form(None, set(), f"Filling in {name} application forms isn't supported yet.")
+        fields = submitter.read_fields(job.posting.application_url)
+        with self._db.transaction() as uow:
+            bank = uow.answer_bank.list()
+        drafted = draft_answers(fields, bank)
+        return _Form(drafted.answers, drafted.used, None)
+
+    def answer(self, application_id: int, answers: dict[str, str | None]) -> Application:
+        """Save answers I typed in review; a blank answer clears the question."""
+        with self._edit_lock:
+            application = self.get(application_id)
+            if application.status != "in_review" or application.answers is None:
+                raise ConflictError("Only the questions of an application in review can be answered.")
+            by_key = {answer.field.key: answer for answer in application.answers}
+            for key, text in answers.items():
+                current = by_key.get(key)
+                if current is None:
+                    raise InvalidRequestError(f"This form has no question “{key}”.")
+                by_key[key] = _typed(current, text)
+            with self._db.transaction() as uow:
+                uow.applications.save_answers(application_id, list(by_key.values()), application.form_error, _now())
+        return self.get(application_id)
+
+    def approve(self, application_id: int) -> Application:
+        """Check the application is ready to submit; submitting it comes with the form filler."""
+        application = self.get(application_id)
+        problem = application.approval_problem
+        if problem is not None:
+            raise ConflictError(problem)
+        return application
 
     def _fail(self, application_id: int, directory: str, message: str) -> None:
         shutil.rmtree(self._dir / directory, ignore_errors=True)

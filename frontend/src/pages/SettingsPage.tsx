@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getAiCosts, getAiSettings, saveAnthropicApiKey, saveModels } from "../api/settings";
+import { AnswerBankPanel } from "../components/AnswerBankPanel";
 import { ApiKeyField } from "../components/form/ApiKeyField";
 import { Field } from "../components/form/Field";
 import { AlertIcon } from "../components/icons";
@@ -82,6 +83,7 @@ export function SettingsPage() {
                 />
               </div>
             </section>
+            <AnswerBankPanel />
             {costs && <CostSummary costs={costs} />}
           </>
         )}

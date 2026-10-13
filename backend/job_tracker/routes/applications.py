@@ -7,6 +7,7 @@ from job_tracker.routes.dependencies import ServicesDep
 from job_tracker.routes.resume import DOCX_TYPE
 from job_tracker.serializers.applications import application_json
 from job_tracker.services.application_service import TAILORED_DOCX, TAILORED_PDF
+from job_tracker.validators.answers import FormAnswersIn
 from job_tracker.validators.applications import TailoredResumeIn
 
 router = APIRouter(prefix="/api", tags=["applications"])
@@ -30,6 +31,19 @@ def get_application(application_id: int, services: ServicesDep) -> dict[str, Any
 def edit_tailored_resume(application_id: int, body: TailoredResumeIn, services: ServicesDep) -> dict[str, Any]:
     """Regenerates the tailored .docx and PDF from my edits."""
     application = services.applications.edit(application_id, body.summary, body.skills)
+    return application_json(application, services.jobs.get(application.job_id))
+
+
+@router.put("/applications/{application_id}/answers")
+def answer_questions(application_id: int, body: FormAnswersIn, services: ServicesDep) -> dict[str, Any]:
+    application = services.applications.answer(application_id, body.answers)
+    return application_json(application, services.jobs.get(application.job_id))
+
+
+@router.post("/applications/{application_id}/approve")
+def approve_application(application_id: int, services: ServicesDep) -> dict[str, Any]:
+    """Refused (409) while anything still needs fixing, such as a required question with no answer."""
+    application = services.applications.approve(application_id)
     return application_json(application, services.jobs.get(application.job_id))
 
 

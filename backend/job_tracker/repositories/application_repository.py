@@ -2,6 +2,7 @@ import json
 import sqlite3
 from dataclasses import asdict
 
+from job_tracker.models.answers import FormAnswer, FormField
 from job_tracker.models.application import OPEN_STATUSES, Application, ApplicationStatus, TailoredResume
 from job_tracker.models.resume import SkillLine
 
@@ -109,6 +110,15 @@ class ApplicationRepository:
         )
         self._conn.execute("UPDATE applications SET updated_at = ? WHERE id = ?", (now, application_id))
 
+    def save_answers(
+        self, application_id: int, answers: list[FormAnswer] | None, form_error: str | None, now: str
+    ) -> None:
+        stored = None if answers is None else json.dumps([asdict(answer) for answer in answers])
+        self._conn.execute(
+            "UPDATE applications SET answers = ?, form_error = ?, updated_at = ? WHERE id = ?",
+            (stored, form_error, now, application_id),
+        )
+
     def delete(self, application_id: int) -> None:
         self._conn.execute("DELETE FROM resume_versions WHERE application_id = ?", (application_id,))
         self._conn.execute("DELETE FROM applications WHERE id = ?", (application_id,))
@@ -149,4 +159,13 @@ def _application(row: sqlite3.Row) -> Application:
         error=row["error"],
         cost_usd=row["cost_usd"],
         resume=resume,
+        answers=None if row["answers"] is None else _answers(row["answers"]),
+        form_error=row["form_error"],
     )
+
+
+def _answers(value: str) -> list[FormAnswer]:
+    return [
+        FormAnswer(field=FormField(**answer["field"]), answer=answer["answer"], source=answer["source"])
+        for answer in json.loads(value)
+    ]

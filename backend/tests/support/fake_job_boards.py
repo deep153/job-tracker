@@ -50,11 +50,14 @@ def greenhouse_job(
     location: str,
     content: str = "<p>Join our team.</p>",
     updated_at: str = "2026-10-01T09:00:00-04:00",
+    url: str | None = None,
 ) -> dict[str, Any]:
-    """One job in the shape the Greenhouse job board API returns it (`content` is plain HTML here)."""
+    """One job in the shape the Greenhouse job board API returns it (`content` is plain HTML here).
+
+    `url` replaces the job's page (where its application form is), for pointing it at a local fake form."""
     job_id = next(_next_job_id)
     return {
-        "absolute_url": greenhouse_job_url(board_id, job_id),
+        "absolute_url": url or greenhouse_job_url(board_id, job_id),
         "id": job_id,
         "location": {"name": location},
         "updated_at": updated_at,
