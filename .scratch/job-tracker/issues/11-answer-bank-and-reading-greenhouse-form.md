@@ -8,13 +8,15 @@ Tests run real Playwright against local fake pages imitating a Greenhouse applic
 
 **Blocked by:** 09 (Apply: tailor and review screen)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Answer bank entries (canonical question, answer, category including EEO) can be listed, added, updated and deleted via API and Settings
-- [ ] Starting an application on a Greenhouse job reads the form's fields and required flags
-- [ ] Each question is matched to a bank entry by normalized + fuzzy matching, and labelled "from bank" or "needs input"
-- [ ] Review bundle includes all form questions with answers and source labels; every answer is editable
-- [ ] Approval is refused by the API, and the button disabled in the UI, while any required question needs input
-- [ ] A local fake Greenhouse form page exists for tests
-- [ ] Test: a question worded differently from the bank entry is still matched
-- [ ] Test: approve is rejected while a required question is unanswered, and allowed once it is filled
+- [x] Answer bank entries (canonical question, answer, category including EEO) can be listed, added, updated and deleted via API and Settings
+- [x] Starting an application on a Greenhouse job reads the form's fields and required flags
+- [x] Each question is matched to a bank entry by normalized + fuzzy matching, and labelled "from bank" or "needs input"
+- [x] Review bundle includes all form questions with answers and source labels; every answer is editable
+- [x] Approval is refused by the API, and the button disabled in the UI, while any required question needs input
+- [x] A local fake Greenhouse form page exists for tests
+- [x] Test: a question worded differently from the bank entry is still matched
+- [x] Test: approve is rejected while a required question is unanswered, and allowed once it is filled
+
+**Notes:** Approving only checks the application is ready for now; ticket 12 makes it fill in and submit the form. The reader handles Greenhouse's React-select dropdowns (it opens each to list its options) and its grouped file uploads, checked against a live Greenhouse form. Jobs on other platforms reach review with a note that their forms aren't supported yet, and can't be approved.

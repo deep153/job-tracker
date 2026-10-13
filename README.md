@@ -8,6 +8,7 @@ Backend (FastAPI, http://127.0.0.1:8000). Data is stored in `~/.job-tracker/job-
 
 ```sh
 cd backend && python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'
+.venv/bin/playwright install chromium   # the browser that reads and fills in application forms
 .venv/bin/uvicorn job_tracker.app:default_app --factory
 ```
 
@@ -66,7 +67,7 @@ Backend (`backend/job_tracker/`). A request flows routes → services → reposi
 | `routes/`       | FastAPI routers (controllers): validate the request, call one service, serialize the result.     |
 | `validators/`   | Pydantic request bodies and their validation rules.                                              |
 | `services/`     | Business logic. Raise the errors in `services/errors.py`, which routes turn into HTTP statuses.  |
-| `clients/`      | Calls to outside APIs and programs: job boards, Brave Search, Claude, LibreOffice.               |
+| `clients/`      | Outside APIs and programs: job boards, Brave Search, Claude, LibreOffice, application forms.     |
 | `repositories/` | All SQL. `Database.transaction()` gives a unit of work whose repositories share one transaction. |
 | `models/`       | Plain dataclasses passed between the layers.                                                     |
 | `serializers/`  | Models to the JSON the API sends.                                                                |

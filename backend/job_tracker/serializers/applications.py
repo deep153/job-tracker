@@ -1,6 +1,7 @@
 from dataclasses import asdict
 from typing import Any
 
+from job_tracker.models.answers import FormAnswer
 from job_tracker.models.application import Application, TailoredResume
 from job_tracker.models.job import Job
 from job_tracker.serializers.jobs import job_json
@@ -44,4 +45,17 @@ def application_json(application: Application, job: Job) -> dict[str, Any]:
         "cost_usd": application.cost_usd,
         "job": job_json(job),
         "resume": None if application.resume is None else _resume_json(application.id, application.resume),
+        "questions": None if application.answers is None else [_question_json(a) for a in application.answers],
+        "form_error": application.form_error,
+        "can_approve": application.approval_problem is None,
+        "approval_problem": application.approval_problem,
+    }
+
+
+def _question_json(answer: FormAnswer) -> dict[str, Any]:
+    return {
+        **asdict(answer.field),
+        "answer": answer.answer,
+        "source": answer.source,
+        "needs_input": answer.needs_input,
     }

@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Literal
 
+from job_tracker.models.answers import FormAnswer
 from job_tracker.models.resume import SkillLine
 
 ApplicationStatus = Literal["drafting", "in_review", "failed"]
@@ -44,3 +45,27 @@ class Application:
     error: str | None
     cost_usd: float
     resume: TailoredResume | None
+    answers: list[FormAnswer] | None = None  # None until the form is read, or when it can't be
+    form_error: str | None = None  # why the form couldn't be read, so the application can't be submitted
+
+    @property
+    def unanswered(self) -> list[FormAnswer]:
+        """Required questions that still need my input."""
+        return [answer for answer in self.answers or [] if answer.needs_input]
+
+    @property
+    def approval_problem(self) -> str | None:
+        """Why the application can't be approved yet, or None when it can."""
+        if self.status != "in_review" or self.resume is None:
+            return "Only an application in review can be approved."
+        if self.form_error is not None:
+            return self.form_error
+        if self.unanswered:
+            labels = ", ".join(f"“{answer.field.label}”" for answer in self.unanswered)
+            return f"Answer the required questions first: {labels}."
+        if self.resume.page_count > self.resume.master_page_count:
+            return (
+                f"The tailored resume runs to {self.resume.page_count} pages, longer than your "
+                f"{self.resume.master_page_count}-page master. Shorten it first."
+            )
+        return None

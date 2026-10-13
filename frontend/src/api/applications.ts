@@ -10,4 +10,12 @@ export const getApplication = (id: number) => request<Application>(`/api/applica
 export const editTailoredResume = (id: number, edits: { summary: string[]; skills: string[][] }) =>
   request<Application>(`/api/applications/${id}/resume`, sendJson("PUT", edits));
 
+/** Saves answers I typed, by question key; an empty answer clears the question. */
+export const answerQuestions = (id: number, answers: Record<string, string>) =>
+  request<Application>(`/api/applications/${id}/answers`, sendJson("PUT", { answers }));
+
+/** Refused while anything still needs fixing, such as a required question with no answer. */
+export const approveApplication = (id: number) =>
+  request<Application>(`/api/applications/${id}/approve`, { method: "POST" });
+
 export const cancelApplication = (id: number) => request<void>(`/api/applications/${id}`, { method: "DELETE" });

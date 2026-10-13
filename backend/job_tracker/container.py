@@ -8,9 +8,11 @@ import httpx
 
 from job_tracker.clients.brave_search import BraveSearch
 from job_tracker.clients.claude import LLM, ClaudeLLM
+from job_tracker.clients.forms import form_submitters
 from job_tracker.clients.job_boards import job_board_clients
 from job_tracker.clients.libreoffice import MISSING_MESSAGE, LibreOffice
 from job_tracker.database import Database
+from job_tracker.services.answer_bank_service import AnswerBankService
 from job_tracker.services.application_service import ApplicationService
 from job_tracker.services.cost_service import CostService
 from job_tracker.services.fit_scorer import FitScorer
@@ -32,6 +34,7 @@ class Services:
     runs: RunService
     applications: ApplicationService
     costs: CostService
+    answer_bank: AnswerBankService
 
 
 def build_services(db_path: Path, http: httpx.Client, office: LibreOffice | None, llm: LLM | None) -> Services:
@@ -49,5 +52,5 @@ def build_services(db_path: Path, http: httpx.Client, office: LibreOffice | None
     scorer = FitScorer(llm)
     runs = RunService(db, settings, resumes, BraveSearch(http), job_boards, scorer)
     jobs = JobService(db, settings, resumes, scorer)
-    applications = ApplicationService(db, files_dir, settings, resumes, ResumeTailor(llm), office)
-    return Services(office, settings, resumes, jobs, runs, applications, CostService(db))
+    applications = ApplicationService(db, files_dir, settings, resumes, ResumeTailor(llm), office, form_submitters())
+    return Services(office, settings, resumes, jobs, runs, applications, CostService(db), AnswerBankService(db))

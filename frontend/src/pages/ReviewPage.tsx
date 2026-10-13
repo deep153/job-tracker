@@ -1,6 +1,14 @@
 import { useEffect, useState } from "react";
-import { applyToJob, cancelApplication, editTailoredResume, getApplication } from "../api/applications";
+import {
+  answerQuestions,
+  applyToJob,
+  approveApplication,
+  cancelApplication,
+  editTailoredResume,
+  getApplication,
+} from "../api/applications";
 import { AlertIcon, CheckIcon, DownloadIcon, ExternalIcon } from "../components/icons";
+import { answerDraft, changedAnswers, QuestionsPanel } from "../components/QuestionsPanel";
 import { ScoreBadge } from "../components/Score";
 import { Topbar } from "../components/Topbar";
 import type { Application, SkillLine, TailoredResume } from "../types/application";
@@ -80,10 +88,11 @@ function Drafting({ application }: { application: Application }) {
     <section className="panel review-status" aria-live="polite">
       <span className="spinner spinner-dark" aria-hidden="true" />
       <div>
-        <h2 className="panel-title">Tailoring your resume…</h2>
+        <h2 className="panel-title">Preparing your application…</h2>
         <p className="panel-empty">
-          Claude is rewriting your Summary and reordering your Skills for this job. Then the resume is converted to PDF
-          and checked to still fit on the same number of pages. This usually takes under a minute.
+          The application form is read and answered from your answer bank. Claude rewrites your Summary and reorders
+          your Skills for this job, then the resume is converted to PDF and checked to still fit on the same number of
+          pages. This usually takes under a minute.
         </p>
       </div>
       <CancelButton application={application} />
@@ -112,7 +121,7 @@ function Failed({ application }: { application: Application }) {
       <div className="notice notice-error" role="alert">
         <AlertIcon />
         <span className="notice-text">
-          <strong>Tailoring failed.</strong> {application.error}
+          <strong>Preparing the application failed.</strong> {application.error}
         </span>
       </div>
       {error && (
@@ -172,10 +181,16 @@ function InReview({
   resume: TailoredResume;
   onSaved: (application: Application) => void;
 }) {
+  const questions = application.questions ?? [];
   const [draft, setDraft] = useState(() => draftFrom(resume));
-  const [busy, setBusy] = useState<"regenerate" | "save" | null>(null);
+  const [answers, setAnswers] = useState(() => answerDraft(questions));
+  const [busy, setBusy] = useState<"regenerate" | "answers" | "save" | "approve" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [answersError, setAnswersError] = useState<string | null>(null);
+  const [approval, setApproval] = useState<{ ok: boolean; message: string } | null>(null);
   const dirty = JSON.stringify(editsFrom(draft)) !== JSON.stringify(editsFrom(draftFrom(resume)));
+  const changed = changedAnswers(questions, answers);
+  const answersDirty = Object.keys(changed).length > 0;
 
   async function regenerate(then?: () => void) {
     setBusy(then ? "save" : "regenerate");
@@ -192,13 +207,49 @@ function InReview({
     }
   }
 
-  function saveDraft() {
+  async function saveAnswers(): Promise<boolean> {
+    setBusy("answers");
+    setAnswersError(null);
+    try {
+      const saved = await answerQuestions(application.id, changed);
+      onSaved(saved);
+      setAnswers(answerDraft(saved.questions ?? []));
+      return true;
+    } catch (e) {
+      setAnswersError((e as Error).message);
+      return false;
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function saveDraft() {
     const exit = () => {
       window.location.hash = "#/";
     };
+    if (answersDirty && !(await saveAnswers())) return;
     if (dirty) void regenerate(exit);
     else exit();
   }
+
+  async function approve() {
+    setBusy("approve");
+    setApproval(null);
+    try {
+      onSaved(await approveApplication(application.id));
+      setApproval({
+        ok: true,
+        message: "Everything is ready. Submitting the form for you is coming in the next update.",
+      });
+    } catch (e) {
+      setApproval({ ok: false, message: (e as Error).message });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const unsaved = dirty || answersDirty;
+  const approveBlocker = unsaved ? "Save your changes first." : application.approval_problem;
 
   return (
     <>
@@ -208,9 +259,39 @@ function InReview({
           {busy === "save" && <span className="spinner spinner-dark" aria-hidden="true" />}
           Save draft
         </button>
+        <button
+          type="button"
+          className="button button-primary"
+          onClick={approve}
+          disabled={busy !== null || unsaved || !application.can_approve}
+          aria-busy={busy === "approve"}
+          aria-describedby={approveBlocker ? "approve-blocker" : undefined}
+        >
+          {busy === "approve" && <span className="spinner" aria-hidden="true" />}
+          Approve
+        </button>
+        {approveBlocker && (
+          <span className="review-blocker" id="approve-blocker">
+            {approveBlocker}
+          </span>
+        )}
         <span className="review-saved">Saved {timeAgo(application.updated_at)}</span>
         <CostNote usd={application.cost_usd} />
       </div>
+      {approval && (
+        <div className={`notice ${approval.ok ? "notice-success" : "notice-error"}`} role="status">
+          {approval.ok ? <CheckIcon /> : <AlertIcon />}
+          <span className="notice-text">{approval.message}</span>
+        </div>
+      )}
+      {application.form_error && (
+        <div className="notice notice-warning" role="alert">
+          <AlertIcon />
+          <span className="notice-text">
+            <strong>The application form couldn't be read.</strong> {application.form_error}
+          </span>
+        </div>
+      )}
       {!resume.fits && (
         <div className="notice notice-warning" role="alert">
           <AlertIcon />
@@ -221,6 +302,23 @@ function InReview({
       )}
       <div className="resume-layout">
         <div className="resume-main">
+          {application.questions && (
+            <QuestionsPanel
+              questions={questions}
+              draft={answers}
+              onChange={(next) => {
+                setAnswers(next);
+                setAnswersError(null);
+              }}
+              onSave={() => void saveAnswers()}
+              onUndo={() => {
+                setAnswers(answerDraft(questions));
+                setAnswersError(null);
+              }}
+              saving={busy === "answers"}
+              error={answersError}
+            />
+          )}
           <section className="panel" aria-labelledby="edit-heading">
             <div className="panel-header">
               <h2 className="panel-title" id="edit-heading">
