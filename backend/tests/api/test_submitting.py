@@ -91,6 +91,25 @@ def test_a_required_question_added_after_review_is_handed_over_to_me(client: Tes
     assert (again.status_code, again.json()["detail"]) == (409, "This application has already been sent.")
 
 
+def test_a_form_that_errors_on_submit_fails_with_the_reason_and_a_screenshot(
+    client: TestClient, boards: FakeJobBoards
+) -> None:
+    application = reviewed(client, boards, fail=True)
+
+    failed = submit(client, application["id"])
+
+    assert failed["status"] == "failed"
+    assert failed["error"] == (
+        "The form showed an error after submitting: Something went wrong submitting your application. Please try again."
+    )
+    screenshot = client.get(failed["screenshot_url"])
+    assert (screenshot.status_code, screenshot.headers["content-type"]) == (200, "image/png")
+    assert screenshot.content.startswith(b"\x89PNG")
+    assert failed["can_approve"] is True
+    retried = submit(client, application["id"])
+    assert retried["status"] == "failed"
+
+
 def test_a_job_can_only_be_submitted_to_once(client: TestClient, boards: FakeJobBoards) -> None:
     application = reviewed(client, boards)
     submit(client, application["id"])
@@ -100,4 +119,5 @@ def test_a_job_can_only_be_submitted_to_once(client: TestClient, boards: FakeJob
 
     assert (again.status_code, again.json()["detail"]) == (409, "This application has already been sent.")
     assert (reapply.status_code, reapply.json()["detail"]) == (409, "You've already applied to this job.")
+    assert client.delete(f"/api/applications/{application['id']}").status_code == 409
     assert len(fake_forms.submissions()) == 1
