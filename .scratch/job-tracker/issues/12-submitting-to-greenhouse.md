@@ -4,16 +4,18 @@
 
 **Blocked by:** 11 (Answer bank and reading the Greenhouse form)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Approving moves the application through `submitting` to `submitted`, `needs_manual` or `failed`
-- [ ] The browser runs visibly; the tailored PDF is uploaded and reviewed answers are filled exactly as approved
-- [ ] Confirmation is detected and the submitted time is recorded
-- [ ] CAPTCHA or an unrecognized required field leaves the browser open and ends in `needs_manual`
-- [ ] Failures record a reason and a screenshot, viewable from the application
-- [ ] Starting or submitting a second application for a job that already has one past `in_review` is refused
-- [ ] Fake Greenhouse pages include a normal form, a CAPTCHA placeholder variant, and an unknown-required-question variant
-- [ ] Test: approving against the normal fake form ends in `submitted` and the fake page received the PDF and answers
-- [ ] Test: a CAPTCHA form ends in `needs_manual`
-- [ ] Test: a form that errors on submit ends in `failed` with a reason and screenshot
-- [ ] Test: submitting the same job twice is refused
+- [x] Approving moves the application through `submitting` to `submitted`, `needs_manual` or `failed`
+- [x] The browser runs visibly; the tailored PDF is uploaded and reviewed answers are filled exactly as approved
+- [x] Confirmation is detected and the submitted time is recorded
+- [x] CAPTCHA or an unrecognized required field leaves the browser open and ends in `needs_manual`
+- [x] Failures record a reason and a screenshot, viewable from the application
+- [x] Starting or submitting a second application for a job that already has one past `in_review` is refused
+- [x] Fake Greenhouse pages include a normal form, a CAPTCHA placeholder variant, and an unknown-required-question variant
+- [x] Test: approving against the normal fake form ends in `submitted` and the fake page received the PDF and answers
+- [x] Test: a CAPTCHA form ends in `needs_manual`
+- [x] Test: a form that errors on submit ends in `failed` with a reason and screenshot
+- [x] Test: submitting the same job twice is refused
+
+**Notes:** Tests run the browser headless (`create_app(visible_browser=False)`); the app shows it. A handover in a visible browser waits until I close the window, and records `submitted` if the confirmation appears while I finish. A submission interrupted by a server restart becomes `needs_manual`, never retried, so nothing is sent twice. Fake form variants are query parameters on the one fixture (`?captcha`, `?fail`) plus `fake_forms.add_to_forms()` for a question added after review.

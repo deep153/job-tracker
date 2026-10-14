@@ -1,3 +1,4 @@
+import type { ApplicationStatus } from "./application";
 import type { Platform, WorkMode } from "./searchSettings";
 
 export type FilterRule = "role" | "excluded_keyword" | "location" | "seniority" | "experience" | "sponsorship" | "salary";
@@ -28,7 +29,7 @@ export type Job = {
   updated_at: string;
   score: FitScore | null;
   dismissed: boolean;
-  application: { id: number; status: "drafting" | "in_review" | "failed" } | null;
+  application: { id: number; status: ApplicationStatus } | null;
 };
 
 export type FilteredJob = Job & { rejection: { rule: FilterRule; reason: string } };

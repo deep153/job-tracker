@@ -11,6 +11,7 @@ import { JobFilters, NO_FILTERS, hasFilters } from "../components/JobFilters";
 import { ScoreBadge, ScoreDetails } from "../components/Score";
 import { SearchSettingsPanel } from "../components/SearchSettingsPanel";
 import { Topbar } from "../components/Topbar";
+import { APPLICATION_LABELS } from "../types/application";
 import type { Company } from "../types/company";
 import type { FilterRule, FilteredJob, Job, JobQuery } from "../types/job";
 import type { Run } from "../types/run";
@@ -752,9 +753,12 @@ function JobRow({ job, onOpen, onDismiss }: { job: Job | FilteredJob } & JobActi
           <span className="dot" aria-hidden="true" />
           <span className="badge">{PLATFORM_LABELS[job.platform]}</span>
           {job.salary && <span className="badge badge-green">{formatSalary(job.salary)}</span>}
-          {job.application && job.application.status !== "failed" && (
-            <a className="badge badge-link" href={`#/applications/${job.application.id}`}>
-              {job.application.status === "drafting" ? "Tailoring resume…" : "Draft in review"}
+          {job.application && (
+            <a
+              className={`badge ${["failed", "needs_manual"].includes(job.application.status) ? "badge-warning" : "badge-link"}`}
+              href={`#/applications/${job.application.id}`}
+            >
+              {APPLICATION_LABELS[job.application.status].badge}
             </a>
           )}
         </div>
