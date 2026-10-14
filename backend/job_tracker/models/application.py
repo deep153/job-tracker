@@ -53,6 +53,7 @@ class Application:
     form_error: str | None = None  # why the form couldn't be read, so the application can't be submitted
     submitted_at: str | None = None
     screenshot: bool = False  # of the form when submitting it failed
+    cover_letter: str | None = None  # only when the form has a cover letter field
 
     @property
     def editable(self) -> bool:
@@ -63,6 +64,11 @@ class Application:
     def submit_failed(self) -> bool:
         """Failed while submitting, after review (a tailoring failure has no resume); approving retries it."""
         return self.status == "failed" and self.resume is not None and self.answers is not None
+
+    @property
+    def cover_letter_file(self) -> bool:
+        """Whether the cover letter is uploaded as a file (rather than only pasted into a text box)."""
+        return any(a.source == "cover_letter" and a.field.kind == "file" for a in self.answers or [])
 
     @property
     def unanswered(self) -> list[FormAnswer]:

@@ -63,7 +63,7 @@ def test_approving_submits_the_reviewed_answers_and_the_tailored_pdf(client: Tes
         "fingerprint": "abc123",
     }
     pdf = client.get(f"/api/applications/{application['id']}/resume.pdf").content
-    assert list(sent.files) == ["resume"]
+    assert list(sent.files) == ["resume", "cover_letter"]
     filename, content = sent.files["resume"]
     assert (filename.endswith(".pdf"), content) == (True, pdf)
 

@@ -46,12 +46,20 @@ def application_json(application: Application, job: Job) -> dict[str, Any]:
         "job": job_json(job),
         "resume": None if application.resume is None else _resume_json(application.id, application.resume),
         "questions": None if application.answers is None else [_question_json(a) for a in application.answers],
+        "cover_letter": _cover_letter_json(application),
         "form_error": application.form_error,
         "submitted_at": application.submitted_at,
         "screenshot_url": f"/api/applications/{application.id}/screenshot.png" if application.screenshot else None,
         "can_approve": application.approval_problem is None,
         "approval_problem": application.approval_problem,
     }
+
+
+def _cover_letter_json(application: Application) -> dict[str, Any] | None:
+    if application.cover_letter is None:
+        return None
+    pdf_url = f"/api/applications/{application.id}/cover-letter.pdf" if application.cover_letter_file else None
+    return {"text": application.cover_letter, "pdf_url": pdf_url}
 
 
 def _question_json(answer: FormAnswer) -> dict[str, Any]:

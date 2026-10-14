@@ -8,9 +8,9 @@ ANSWER_CATEGORIES: tuple[str, ...] = get_args(AnswerCategory)
 
 FieldKind = Literal["text", "textarea", "select", "radio", "checkbox", "file"]
 
-# Where an answer came from: my answer bank, the tailored resume (for the resume upload), drafted by the AI from
-# my resume and the job, typed by me in review, or nowhere yet.
-AnswerSource = Literal["bank", "resume", "ai", "you", "none"]
+# Where an answer came from: my answer bank, the tailored resume (for the resume upload), the tailored cover letter
+# (uploaded or pasted), drafted by the AI from my resume and the job, typed by me in review, or nowhere yet.
+AnswerSource = Literal["bank", "resume", "cover_letter", "ai", "you", "none"]
 
 
 @dataclass(frozen=True)

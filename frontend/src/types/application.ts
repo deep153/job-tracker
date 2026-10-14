@@ -32,9 +32,15 @@ export type TailoredResume = {
   docx_url: string;
 };
 
-/** Where an answer came from: my answer bank, the tailored resume, drafted by the AI, typed by me in review, or
- * nowhere yet. */
-export type AnswerSource = "bank" | "resume" | "ai" | "you" | "none";
+/** Where an answer came from: my answer bank, the tailored resume, the cover letter, drafted by the AI, typed by
+ * me in review, or nowhere yet. */
+export type AnswerSource = "bank" | "resume" | "cover_letter" | "ai" | "you" | "none";
+
+export type CoverLetter = {
+  text: string;
+  /** Set when the form takes the letter as a file. */
+  pdf_url: string | null;
+};
 
 export type FormQuestion = {
   key: string;
@@ -61,6 +67,8 @@ export type Application = {
   resume: TailoredResume | null;
   /** The application form's questions; null until it's read, or when it can't be. */
   questions: FormQuestion[] | null;
+  /** Only when the form has a cover letter field. */
+  cover_letter: CoverLetter | null;
   form_error: string | null;
   submitted_at: string | null;
   /** The page as it was when sending failed. */

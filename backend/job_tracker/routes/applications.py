@@ -8,7 +8,7 @@ from job_tracker.routes.resume import DOCX_TYPE
 from job_tracker.serializers.applications import application_json
 from job_tracker.services.application_service import TAILORED_DOCX, TAILORED_PDF
 from job_tracker.validators.answers import FormAnswersIn, SaveToBankIn
-from job_tracker.validators.applications import TailoredResumeIn
+from job_tracker.validators.applications import CoverLetterIn, TailoredResumeIn
 
 router = APIRouter(prefix="/api", tags=["applications"])
 
@@ -31,6 +31,12 @@ def get_application(application_id: int, services: ServicesDep) -> dict[str, Any
 def edit_tailored_resume(application_id: int, body: TailoredResumeIn, services: ServicesDep) -> dict[str, Any]:
     """Regenerates the tailored .docx and PDF from my edits."""
     application = services.applications.edit(application_id, body.summary, body.skills)
+    return application_json(application, services.jobs.get(application.job_id))
+
+
+@router.put("/applications/{application_id}/cover-letter")
+def edit_cover_letter(application_id: int, body: CoverLetterIn, services: ServicesDep) -> dict[str, Any]:
+    application = services.applications.edit_cover_letter(application_id, body.text)
     return application_json(application, services.jobs.get(application.job_id))
 
 
@@ -65,6 +71,12 @@ def cancel_application(application_id: int, services: ServicesDep) -> Response:
 @router.get("/applications/{application_id}/resume.pdf")
 def get_tailored_pdf(application_id: int, services: ServicesDep) -> FileResponse:
     return FileResponse(services.applications.file(application_id, TAILORED_PDF), media_type="application/pdf")
+
+
+@router.get("/applications/{application_id}/cover-letter.pdf")
+def get_cover_letter_pdf(application_id: int, services: ServicesDep) -> FileResponse:
+    """The cover letter as it's uploaded, when the form takes it as a file."""
+    return FileResponse(services.applications.cover_letter_pdf(application_id), media_type="application/pdf")
 
 
 @router.get("/applications/{application_id}/screenshot.png")

@@ -10,6 +10,9 @@ export const getApplication = (id: number) => request<Application>(`/api/applica
 export const editTailoredResume = (id: number, edits: { summary: string[]; skills: string[][] }) =>
   request<Application>(`/api/applications/${id}/resume`, sendJson("PUT", edits));
 
+export const editCoverLetter = (id: number, text: string) =>
+  request<Application>(`/api/applications/${id}/cover-letter`, sendJson("PUT", { text }));
+
 /** Saves answers I typed, by question key; an empty answer clears the question. */
 export const answerQuestions = (id: number, answers: Record<string, string>) =>
   request<Application>(`/api/applications/${id}/answers`, sendJson("PUT", { answers }));

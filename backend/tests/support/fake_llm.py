@@ -24,8 +24,12 @@ class LLMCall:
         return "answers" in self.schema.get("properties", {})
 
     @property
+    def is_cover_letter(self) -> bool:
+        return "cover_letter" in self.schema.get("properties", {})
+
+    @property
     def is_scoring(self) -> bool:
-        return not self.is_tailoring and not self.is_answering
+        return not self.is_tailoring and not self.is_answering and not self.is_cover_letter
 
     @property
     def questions(self) -> list[str]:
@@ -34,6 +38,10 @@ class LLMCall:
 
 
 DEFAULT_TAILORED_SUMMARY = "Backend engineer who builds reliable payment APIs in Python and Go."
+DEFAULT_COVER_LETTER = (
+    "Dear Globex hiring team,\n\nI have spent six years building payment systems in Python and Go, and I would "
+    "like to bring that to your backend team.\n\nSincerely,\nJordan Rivera"
+)
 
 
 class FakeLLM:
@@ -44,6 +52,7 @@ class FakeLLM:
     Tailoring prompts get the answers queued with `tailor`, in order, then a stock answer that rewrites the
     summary and leaves the skills lines as they are.
     Answering prompts get the drafts scripted with `draft` for their questions, and no answer for the rest.
+    Cover letter prompts get DEFAULT_COVER_LETTER.
     """
 
     INPUT_TOKENS = 1000
@@ -90,6 +99,9 @@ class FakeLLM:
     def answering_calls(self) -> list[LLMCall]:
         return [call for call in self.calls if call.is_answering]
 
+    def cover_letter_calls(self) -> list[LLMCall]:
+        return [call for call in self.calls if call.is_cover_letter]
+
     def generate(
         self, *, api_key: str, model: str, system: str, prompt: str, schema: dict[str, Any], max_tokens: int
     ) -> LLMResponse:
@@ -105,6 +117,8 @@ class FakeLLM:
                 for question in _questions(prompt)
             ]
             return LLMResponse({"answers": drafts}, model, self.INPUT_TOKENS, self.OUTPUT_TOKENS)
+        if call.is_cover_letter:
+            return LLMResponse({"cover_letter": DEFAULT_COVER_LETTER}, model, self.INPUT_TOKENS, self.OUTPUT_TOKENS)
         answer = tailored if call.is_tailoring else self._answers.get(_title(prompt))
         if isinstance(answer, LLMError):
             raise answer

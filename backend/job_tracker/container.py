@@ -16,6 +16,7 @@ from job_tracker.services.answer_bank_service import AnswerBankService
 from job_tracker.services.answer_writer import AnswerWriter
 from job_tracker.services.application_service import ApplicationService
 from job_tracker.services.cost_service import CostService
+from job_tracker.services.cover_letter_writer import CoverLetterWriter
 from job_tracker.services.fit_scorer import FitScorer
 from job_tracker.services.job_service import JobService
 from job_tracker.services.resume_service import ResumeService
@@ -57,6 +58,14 @@ def build_services(
     runs = RunService(db, settings, resumes, BraveSearch(http), job_boards, scorer)
     jobs = JobService(db, settings, resumes, scorer)
     applications = ApplicationService(
-        db, files_dir, settings, resumes, ResumeTailor(llm), AnswerWriter(llm), office, form_submitters(visible_browser)
+        db,
+        files_dir,
+        settings,
+        resumes,
+        ResumeTailor(llm),
+        AnswerWriter(llm),
+        CoverLetterWriter(llm),
+        office,
+        form_submitters(visible_browser),
     )
     return Services(office, settings, resumes, jobs, runs, applications, CostService(db), AnswerBankService(db))
