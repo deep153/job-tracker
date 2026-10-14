@@ -40,6 +40,22 @@ class ApplicationRepository:
         row = self._conn.execute(f"{_WITH_RESUME} WHERE applications.id = ?", (application_id,)).fetchone()
         return None if row is None else _application(row)
 
+    def list_all(self) -> list[Application]:
+        """Newest first, by when each was submitted (or started, if it hasn't been)."""
+        rows = self._conn.execute(
+            f"{_WITH_RESUME} ORDER BY COALESCE(applications.submitted_at, applications.created_at) DESC,"
+            " applications.id DESC"
+        ).fetchall()
+        return [_application(row) for row in rows]
+
+    def track(self, application_id: int, status: ApplicationStatus, now: str) -> None:
+        """Sets a status I chose by hand; marking it `submitted` (I finished it myself) records when."""
+        self._conn.execute(
+            "UPDATE applications SET status = ?, error = NULL, updated_at = ?,"
+            " submitted_at = CASE WHEN ? = 'submitted' THEN ? ELSE submitted_at END WHERE id = ?",
+            (status, now, status, now, application_id),
+        )
+
     def open_for_job(self, job_id: int) -> Application | None:
         placeholders = ",".join("?" * len(OPEN_STATUSES))
         row = self._conn.execute(

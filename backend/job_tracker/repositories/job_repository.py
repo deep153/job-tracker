@@ -1,7 +1,7 @@
 import json
 import sqlite3
 
-from job_tracker.models.application import ApplicationRef
+from job_tracker.models.application import APPLIED_STATUSES, ApplicationRef
 from job_tracker.models.job import FitScore, Job, JobQuery, JobSort, Rejection
 from job_tracker.models.posting import Posting, SalaryRange
 
@@ -23,11 +23,15 @@ _SCORED = f"""
     )
 """
 
-# Open jobs I haven't dismissed, at companies that aren't blocked, with their latest score.
+_APPLIED = ", ".join(f"'{status}'" for status in APPLIED_STATUSES)
+
+# Open jobs I haven't dismissed or applied to, at companies that aren't blocked, with their latest score.
 _VISIBLE = f"""
     {_SCORED}
     JOIN companies ON companies.platform = jobs.platform AND companies.board_id = jobs.board_id
-    WHERE jobs.closed = 0 AND jobs.dismissed = 0 AND companies.blocked = 0
+    WHERE jobs.closed = 0 AND jobs.dismissed = 0 AND companies.blocked = 0 AND NOT EXISTS (
+        SELECT 1 FROM applications WHERE applications.job_id = jobs.id AND applications.status IN ({_APPLIED})
+    )
 """
 
 _ORDER_BY: dict[JobSort, str] = {

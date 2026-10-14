@@ -3,10 +3,11 @@ import { getStatus } from "../api/status";
 import type { SystemStatus } from "../types/status";
 import { AlertIcon } from "./icons";
 
-export type Page = "jobs" | "resume" | "settings";
+export type Page = "jobs" | "applications" | "resume" | "settings";
 
 const PAGES: { id: Page; label: string; href: string }[] = [
   { id: "jobs", label: "Jobs", href: "#/" },
+  { id: "applications", label: "Applications", href: "#/applications" },
   { id: "resume", label: "Resume", href: "#/resume" },
   { id: "settings", label: "Settings", href: "#/settings" },
 ];

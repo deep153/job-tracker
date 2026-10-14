@@ -1,9 +1,17 @@
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
+from job_tracker.models.application import TrackedStatus
+
 SummaryText = Annotated[str, Field(max_length=5000)]
 Skill = Annotated[str, Field(max_length=200)]
+
+
+class StatusIn(BaseModel):
+    """`submitted` marks an application I finished by hand; the rest record what I heard back."""
+
+    status: Literal["submitted", TrackedStatus]
 
 
 class CoverLetterIn(BaseModel):

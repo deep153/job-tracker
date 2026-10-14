@@ -4,14 +4,22 @@ from typing import Literal
 from job_tracker.models.answers import FormAnswer
 from job_tracker.models.resume import SkillLine
 
-ApplicationStatus = Literal["drafting", "in_review", "submitting", "submitted", "needs_manual", "failed"]
+TrackedStatus = Literal["interviewing", "rejected", "offer", "withdrawn"]
+
+ApplicationStatus = Literal["drafting", "in_review", "submitting", "submitted", "needs_manual", "failed", TrackedStatus]
 
 # An application in one of these is still being worked on; applying to its job again returns it.
 OPEN_STATUSES: tuple[ApplicationStatus, ...] = ("drafting", "in_review")
 
+# What I set by hand once an application has been submitted, as I hear back.
+TRACKED_STATUSES: tuple[TrackedStatus, ...] = ("interviewing", "rejected", "offer", "withdrawn")
+
+# An application in one of these reached the company; its job leaves the dashboard.
+APPLIED_STATUSES: tuple[ApplicationStatus, ...] = ("submitted", *TRACKED_STATUSES)
+
 # An application in one of these has been (or is being) sent, so its job can't be applied to again. A job has at
 # most one.
-SENT_STATUSES: tuple[ApplicationStatus, ...] = ("submitting", "submitted", "needs_manual")
+SENT_STATUSES: tuple[ApplicationStatus, ...] = ("submitting", "needs_manual", *APPLIED_STATUSES)
 
 
 @dataclass(frozen=True)

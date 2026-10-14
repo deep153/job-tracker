@@ -82,6 +82,43 @@ function AnswerInput({
   return <input id={id} className="text-input" value={value} onChange={(e) => onChange(e.target.value)} />;
 }
 
+function sentAnswer(question: FormQuestion): string {
+  if (question.source === "cover_letter") return "Your cover letter";
+  if (question.kind === "file") return question.source === "resume" ? "Your tailored resume PDF" : "Left empty";
+  return question.answer ?? "Left empty";
+}
+
+/** The answers as they were sent, read-only. */
+export function SentAnswersPanel({ questions }: { questions: FormQuestion[] }) {
+  return (
+    <section className="panel" aria-labelledby="sent-answers-heading">
+      <div className="panel-header">
+        <h2 className="panel-title" id="sent-answers-heading">
+          Answers you sent
+        </h2>
+      </div>
+      <div className="panel-body">
+        {questions.length === 0 && <p className="panel-empty">The form had no questions.</p>}
+        <dl className="sent-answers">
+          {questions.map((question) => (
+            <div className="sent-answer" key={question.key}>
+              <dt className="question-header">
+                <span className="field-label">{question.label}</span>
+                {question.answer !== null || question.kind === "file" || question.source === "cover_letter" ? (
+                  <SourceBadge question={question} />
+                ) : null}
+              </dt>
+              <dd className={question.answer === null && question.kind !== "file" ? "sent-answer-empty" : undefined}>
+                {sentAnswer(question)}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+    </section>
+  );
+}
+
 export function QuestionsPanel({
   questions,
   draft,

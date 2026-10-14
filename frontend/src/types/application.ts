@@ -1,6 +1,13 @@
 import type { Job } from "./job";
 
-export type ApplicationStatus = "drafting" | "in_review" | "submitting" | "submitted" | "needs_manual" | "failed";
+/** What I set by hand once an application has been submitted, as I hear back. */
+export type TrackedStatus = "interviewing" | "rejected" | "offer" | "withdrawn";
+
+export type ApplicationStatus =
+  "drafting" | "in_review" | "submitting" | "submitted" | "needs_manual" | "failed" | TrackedStatus;
+
+/** Statuses of an application that reached the company; its job is gone from the dashboard. */
+export const APPLIED_STATUSES: ApplicationStatus[] = ["submitted", "interviewing", "rejected", "offer", "withdrawn"];
 
 /** How each status reads as a badge on a job, and as the button that opens the application. */
 export const APPLICATION_LABELS: Record<ApplicationStatus, { badge: string; action: string }> = {
@@ -10,6 +17,19 @@ export const APPLICATION_LABELS: Record<ApplicationStatus, { badge: string; acti
   submitted: { badge: "Applied", action: "View application" },
   needs_manual: { badge: "Finish by hand", action: "Finish application" },
   failed: { badge: "Failed", action: "See what went wrong" },
+  interviewing: { badge: "Interviewing", action: "View application" },
+  rejected: { badge: "Rejected", action: "View application" },
+  offer: { badge: "Offer", action: "View application" },
+  withdrawn: { badge: "Withdrawn", action: "View application" },
+};
+
+/** A row in the applications list. */
+export type ApplicationSummary = {
+  id: number;
+  status: ApplicationStatus;
+  /** When it was submitted, or started if it hasn't been. */
+  date: string;
+  job: Job;
 };
 
 export type SkillLine = { label: string | null; skills: string[] };

@@ -1,5 +1,12 @@
-import type { Application } from "../types/application";
+import type { Application, ApplicationSummary, TrackedStatus } from "../types/application";
 import { request, sendJson } from "./client";
+
+/** Every application, newest first. */
+export const listApplications = () => request<ApplicationSummary[]>("/api/applications");
+
+/** Refused until the application is submitted; `submitted` marks one I finished by hand. */
+export const setApplicationStatus = (id: number, status: TrackedStatus | "submitted") =>
+  request<Application>(`/api/applications/${id}/status`, sendJson("PUT", { status }));
 
 /** Starts tailoring my resume for the job, or returns the job's open application. */
 export const applyToJob = (jobId: number) => request<Application>(`/api/jobs/${jobId}/apply`, { method: "POST" });
