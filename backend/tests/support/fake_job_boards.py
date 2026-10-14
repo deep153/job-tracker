@@ -66,6 +66,39 @@ def greenhouse_job(
     }
 
 
+def lever_job(board_id: str, title: str, location: str, content: str, url: str) -> dict[str, Any]:
+    """One posting in the shape the Lever postings API returns it, whose application form is at `url`."""
+    job_id = f"0b6e1c2a-1111-4c3d-8e9f-{next(_next_job_id):012d}"
+    return {
+        "id": job_id,
+        "text": title,
+        "categories": {"location": location, "allLocations": [location]},
+        "workplaceType": "onsite",
+        "createdAt": 1790856000000,
+        "description": content,
+        "lists": [],
+        "additional": "",
+        "hostedUrl": lever_job_url(board_id, job_id),
+        "applyUrl": url,
+    }
+
+
+def ashby_job(board_id: str, title: str, location: str, content: str, url: str) -> dict[str, Any]:
+    """One posting in the shape the Ashby job board API returns it, whose application form is at `url`."""
+    job_id = f"0b6e1c2a-2222-4c3d-8e9f-{next(_next_job_id):012d}"
+    return {
+        "id": job_id,
+        "title": title,
+        "location": location,
+        "isListed": True,
+        "workplaceType": "OnSite",
+        "publishedAt": "2026-10-01T09:00:00.000+00:00",
+        "descriptionHtml": content,
+        "jobUrl": ashby_job_url(board_id, job_id),
+        "applyUrl": url,
+    }
+
+
 class FakeJobBoards:
     """Serves recorded job-board fixtures and scripted web search results instead of the network.
 
@@ -88,9 +121,14 @@ class FakeJobBoards:
         """Serve `fixtures/<platform>/<fixture>.json` for this board from now on."""
         self._fixtures[(platform, board_id)] = fixture
 
-    def serve_jobs(self, board_id: str, jobs: list[dict[str, Any]]) -> None:
-        """Serve these Greenhouse jobs (see `greenhouse_job`) for this board from now on."""
-        self._inline[("greenhouse", board_id)] = json.dumps({"jobs": jobs, "meta": {"total": len(jobs)}}).encode()
+    def serve_jobs(self, board_id: str, jobs: list[dict[str, Any]], platform: str = "greenhouse") -> None:
+        """Serve these jobs (see `greenhouse_job`, `lever_job` and `ashby_job`) for this board from now on."""
+        body: Any = jobs
+        if platform == "greenhouse":
+            body = {"jobs": jobs, "meta": {"total": len(jobs)}}
+        elif platform == "ashby":
+            body = {"apiVersion": "1", "jobs": jobs}
+        self._inline[(platform, board_id)] = json.dumps(body).encode()
 
     def fail(self, platform: str, board_id: str, status: int = 500) -> None:
         self._failures[(platform, board_id)] = status

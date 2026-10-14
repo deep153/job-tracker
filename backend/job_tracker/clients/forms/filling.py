@@ -8,7 +8,15 @@ from typing import Any, Literal
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import Frame, Page, sync_playwright
 
-from job_tracker.clients.forms.reading import FormError, clean, field_locator, open_dropdown, open_form, raw_fields
+from job_tracker.clients.forms.reading import (
+    FormError,
+    FormLayout,
+    clean,
+    field_locator,
+    open_dropdown,
+    open_form,
+    raw_fields,
+)
 from job_tracker.models.answers import FormAnswer
 
 SubmitOutcome = Literal["submitted", "needs_manual"]
@@ -42,15 +50,16 @@ _CAPTCHA = """
 
 # Runs in a frame: whether it shows the confirmation that the application went through.
 _CONFIRMED = """
-() => /confirmation/i.test(location.pathname)
+() => /confirmation|\\/thanks\\b/i.test(location.pathname)
   || document.querySelector("#application_confirmation, .application-confirmation") !== null
-  || /thank you for (applying|your application)|application (has been )?(submitted|received)/i
+  || /thank(s| you) for (applying|your application)|application (has been |was )?(successfully )?(submitted|received)/i
        .test(document.body ? document.body.innerText : "")
 """
 
-# Runs in a frame: the error messages it shows.
+# Runs in a frame: the error messages it shows. Forms keep some messages in the page, hidden, until they apply.
 _ERRORS = """
 () => [...document.querySelectorAll("[role=alert], .error-message, .helper-text--error, .field-error, .flash-error")]
+  .filter((el) => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== "hidden")
   .map((el) => (el.innerText || "").trim()).filter(Boolean)
 """
 
@@ -101,23 +110,30 @@ def _fill(frame: Frame, answer: FormAnswer, resume_pdf: Path) -> None:
         frame.locator(f'[id="{list_id}"] [role=option]').nth(options.index(answer.answer)).click()
     elif field.kind in ("radio", "checkbox") and field.options:
         inputs = frame.locator(f'input[name="{field.key}"]')
+        toggles = inputs.first.locator("xpath=..").locator("button[aria-pressed]")
+        choices = toggles if toggles.count() else inputs
         labels = [
-            clean(text) for text in inputs.evaluate_all("(els) => els.map((el) => el.labels?.[0]?.innerText || '')")
+            clean(text)
+            for text in choices.evaluate_all(
+                "(els) => els.map((el) => el.tagName === 'BUTTON' ? el.innerText : el.labels?.[0]?.innerText || '')"
+            )
         ]
         if answer.answer not in labels:
             raise SubmitError(f"“{field.label}” no longer offers the answer “{answer.answer}”.")
-        inputs.nth(labels.index(answer.answer)).check()
+        chosen = choices.nth(labels.index(answer.answer))
+        if toggles.count():
+            chosen.click()
+        else:
+            chosen.check()
     elif field.kind == "checkbox":
         box.set_checked(answer.answer == "Yes")
 
 
-def _unknown_required(frame: Frame, selector: str, answers: list[FormAnswer]) -> list[str]:
+def _unknown_required(frame: Frame, layout: FormLayout, answers: list[FormAnswer]) -> list[str]:
     """Labels of required questions on the form that weren't there when it was reviewed."""
     known = {answer.field.key for answer in answers}
     return [
-        clean(field["label"])
-        for field in raw_fields(frame, selector)
-        if field["required"] and field["key"] not in known
+        clean(field["label"]) for field in raw_fields(frame, layout) if field["required"] and field["key"] not in known
     ]
 
 
@@ -167,8 +183,7 @@ def _await_result(page: Page, on_handover: Callable[[str], None], visible: bool)
 
 def submit_form(
     url: str,
-    selector: str,
-    submit_button: str,
+    layout: FormLayout,
     answers: list[FormAnswer],
     resume_pdf: Path,
     screenshot: Path,
@@ -179,8 +194,8 @@ def submit_form(
         browser = playwright.chromium.launch(headless=not visible)
         page = browser.new_page()
         try:
-            frame = open_form(page, url, selector)
-            unknown = _unknown_required(frame, selector, answers)
+            frame = open_form(page, url, layout)
+            unknown = _unknown_required(frame, layout, answers)
             for answer in answers:
                 _fill(frame, answer, resume_pdf)
             if unknown:
@@ -193,7 +208,7 @@ def submit_form(
                 )
             if _captcha(page):
                 return _hand_over(page, "The form has a CAPTCHA to solve.", on_handover, visible)
-            frame.locator(selector).first.locator(submit_button).first.click()
+            frame.locator(layout.form).first.locator(layout.submit).first.click()
             return _await_result(page, on_handover, visible)
         except SubmitError as error:
             raise SubmitError(error.message, _screenshot(page, screenshot)) from error

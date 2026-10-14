@@ -1,16 +1,36 @@
 import io
 import time
+from collections.abc import Callable
 from typing import Any
 
 from fastapi.testclient import TestClient
 from pypdf import PdfReader
 
-from tests.support.api import READY_SETTINGS, discover_boards, run_to_completion
+from tests.support.api import READY_SETTINGS, configure_search, run_to_completion
 from tests.support.fake_forms import form_url
-from tests.support.fake_job_boards import FakeJobBoards, greenhouse_job
+from tests.support.fake_job_boards import (
+    FakeJobBoards,
+    ashby_job,
+    ashby_job_url,
+    greenhouse_job,
+    greenhouse_job_url,
+    lever_job,
+    lever_job_url,
+)
 from tests.support.resumes import add_ready_resume
 
 BOARD = "globex"
+
+_JOBS: dict[str, Callable[..., dict[str, Any]]] = {
+    "greenhouse": greenhouse_job,
+    "lever": lever_job,
+    "ashby": ashby_job,
+}
+_BOARD_URLS: dict[str, Callable[[str], str]] = {
+    "greenhouse": greenhouse_job_url,
+    "lever": lever_job_url,
+    "ashby": ashby_job_url,
+}
 
 
 def scored_job(
@@ -19,14 +39,16 @@ def scored_job(
     bold_labels: bool = False,
     form: str = "greenhouse.html",
     variants: dict[str, bool] | None = None,
+    platform: str = "greenhouse",
 ) -> int:
-    """A ready resume and one scored job to apply to, whose application form is the local fake page `form` (with
-    `variants`, see `fake_forms`); returns the job's id."""
+    """A ready resume and one scored job on `platform` to apply to, whose application form is the local fake page
+    `form` (with `variants`, see `fake_forms`); returns the job's id."""
     add_ready_resume(client, bold_labels=bold_labels)
     url = form_url(form, **(variants or {}))
-    job = greenhouse_job(BOARD, "Backend Engineer", "New York, NY", "<p>Payments in Go.</p>", url=url)
-    boards.serve_jobs(BOARD, [job])
-    discover_boards(client, boards, [BOARD], {**READY_SETTINGS, "roles": ["Engineer"]})
+    job = _JOBS[platform](BOARD, "Backend Engineer", "New York, NY", "<p>Payments in Go.</p>", url=url)
+    boards.serve_jobs(BOARD, [job], platform)
+    configure_search(client, {**READY_SETTINGS, "roles": ["Engineer"], "platforms": [platform]})
+    boards.search_returns([_BOARD_URLS[platform](BOARD)])
     run_to_completion(client)
     [job] = client.get("/api/jobs").json()
     return int(job["id"])

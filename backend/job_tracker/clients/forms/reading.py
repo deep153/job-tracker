@@ -1,5 +1,7 @@
 """Reading an application form's questions from a page with Playwright, shared by the platform adapters."""
 
+import time
+from dataclasses import dataclass
 from typing import Any
 
 from playwright.sync_api import Error as PlaywrightError
@@ -9,6 +11,8 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from job_tracker.models.answers import FormField
 
 PAGE_TIMEOUT_MS = 30_000
+# Forms built by a single-page app (like Ashby's) only appear a moment after the page has loaded.
+FORM_WAIT_S = 10
 
 
 class FormError(Exception):
@@ -17,12 +21,23 @@ class FormError(Exception):
         self.message = message
 
 
-# Runs in the page: the questions in the form matching `selector`, or null when the frame has no such form.
-# Labels come from <label for>, aria-labelledby, or a fieldset's legend; a trailing "*" marks a required field
-# on forms that don't set `required` or `aria-required`.
+@dataclass(frozen=True)
+class FormLayout:
+    """Where a platform's application form is on its page, and how its questions are laid out."""
+
+    form: str  # the element holding every question and the submit button (not always a <form>)
+    submit: str  # the button that sends it, inside `form`
+    question: str | None = None  # the element around each question, when its label isn't a <label> for the input
+    question_label: str | None = None  # the question's label, inside `question`
+
+
+# Runs in the page: the questions in the form `layout.form`, or null when the frame has no such form.
+# Labels come from the question's label in the layout, <label for>, aria-labelledby, or a fieldset's legend. A
+# trailing "*" or "✱", or a "required" class on the question's label, marks a required field on forms that don't
+# set `required` or `aria-required`. Yes/No toggle buttons over a hidden checkbox are read as a radio group.
 _READ_FIELDS = """
-(selector) => {
-  const form = document.querySelector(selector);
+(layout) => {
+  const form = document.querySelector(layout.form);
   if (!form) return null;
   const text = (el) => (el ? el.innerText || el.textContent || "" : "");
   const byIds = (ids) => (ids || "").split(/\\s+/).map((id) => text(document.getElementById(id))).join(" ");
@@ -31,8 +46,14 @@ _READ_FIELDS = """
     if (el.getAttribute("aria-labelledby")) return byIds(el.getAttribute("aria-labelledby"));
     return el.getAttribute("aria-label") || el.getAttribute("placeholder") || el.name || el.id;
   };
+  const questionLabel = (el) => {
+    const question = layout.question ? el.closest(layout.question) : null;
+    return question ? question.querySelector(layout.questionLabel) : null;
+  };
+  const markedRequired = (label) =>
+    label !== null && (label.matches("[class*=required]") || label.querySelector("[class*=required]") !== null);
   const isRequired = (el, label) =>
-    el.required || el.getAttribute("aria-required") === "true" || /\\*\\s*$/.test(label.trim());
+    el.required || el.getAttribute("aria-required") === "true" || /[*✱]\\s*$/.test(label.trim());
   const fields = [];
   const seen = new Set();
   for (const el of form.querySelectorAll("input, select, textarea")) {
@@ -41,17 +62,28 @@ _READ_FIELDS = """
     const key = el.name || el.id;
     if (!key || seen.has(key)) continue;
     seen.add(key);
+    const question = questionLabel(el);
+    const toggles = type === "checkbox" ? [...el.parentElement.querySelectorAll("button[aria-pressed]")] : [];
+    if (toggles.length) {
+      const label = text(question);
+      fields.push({
+        key, label: label || key, kind: "radio", required: markedRequired(question) || isRequired(el, label),
+        options: toggles.map((button) => text(button)), combobox: false,
+      });
+      continue;
+    }
     if (type === "radio" || type === "checkbox") {
       const group = [...form.querySelectorAll("input")].filter((other) => other.name === el.name);
       if (type === "radio" || group.length > 1) {
         const fieldset = el.closest("fieldset");
         const container = el.closest("[role=group], [role=radiogroup]");
-        let label = fieldset ? text(fieldset.querySelector("legend")) : "";
+        let label = question ? text(question) : "";
+        if (!label && fieldset) label = text(fieldset.querySelector("legend"));
         if (!label && container) label = byIds(container.getAttribute("aria-labelledby"));
         const groupRequired = fieldset && fieldset.getAttribute("aria-required") === "true";
         fields.push({
           key, label: label || key, kind: type,
-          required: groupRequired || group.some((one) => isRequired(one, label)),
+          required: groupRequired || markedRequired(question) || group.some((one) => isRequired(one, label)),
           options: group.map((one) => labelOf(one)),
           combobox: false,
         });
@@ -60,12 +92,13 @@ _READ_FIELDS = """
     }
     // A file input's own label is its "Attach" button; the question is the label of the group around it.
     const group = type === "file" ? el.closest("[role=group][aria-labelledby]") : null;
-    const label = group ? byIds(group.getAttribute("aria-labelledby")) : labelOf(el);
+    const label = question ? text(question) : group ? byIds(group.getAttribute("aria-labelledby")) : labelOf(el);
     const combobox = el.getAttribute("role") === "combobox";
     const kind = el.tagName === "SELECT" || combobox ? "select" : el.tagName === "TEXTAREA" ? "textarea"
       : ["file", "checkbox"].includes(type) ? type : "text";
     const options = el.tagName === "SELECT" ? [...el.options].filter((o) => o.value !== "").map((o) => text(o)) : [];
-    const required = isRequired(el, label) || (group !== null && group.getAttribute("aria-required") === "true");
+    const required = isRequired(el, label) || markedRequired(question)
+      || (group !== null && group.getAttribute("aria-required") === "true");
     fields.push({ key, label, kind, required, options, combobox });
   }
   return fields;
@@ -84,7 +117,7 @@ _OPEN_TIMEOUT_MS = 3_000
 
 
 def clean(text: str) -> str:
-    return " ".join(text.replace("*", " ").split())
+    return " ".join(text.replace("*", " ").replace("✱", " ").split())
 
 
 def _fields(raw: list[dict[str, Any]]) -> list[FormField]:
@@ -100,13 +133,13 @@ def _fields(raw: list[dict[str, Any]]) -> list[FormField]:
     ]
 
 
-def read_form(url: str, selector: str) -> list[FormField]:
-    """The questions in the first form matching `selector` on the page at `url` or in one of its frames."""
+def read_form(url: str, layout: FormLayout) -> list[FormField]:
+    """The questions in the form laid out as `layout` on the page at `url` or in one of its frames."""
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
         try:
-            frame = open_form(browser.new_page(), url, selector)
-            raw = raw_fields(frame, selector)
+            frame = open_form(browser.new_page(), url, layout)
+            raw = raw_fields(frame, layout)
             for field in raw:
                 if field["combobox"]:
                     field["options"] = _dropdown_options(frame, field["key"])
@@ -117,23 +150,30 @@ def read_form(url: str, selector: str) -> list[FormField]:
             browser.close()
 
 
-def open_form(page: Page, url: str, selector: str) -> Frame:
-    """Open `url` and find the frame holding the form matching `selector`."""
+def open_form(page: Page, url: str, layout: FormLayout) -> Frame:
+    """Open `url` and find the frame holding the form, waiting a while for one that's still being built."""
     response = page.goto(url, wait_until="load", timeout=PAGE_TIMEOUT_MS)
     if response is not None and not response.ok:
         raise FormError(f"Couldn't open the application form at {url} (HTTP {response.status}).")
-    for frame in page.frames:
-        try:
-            if frame.evaluate("(selector) => document.querySelector(selector) !== null", selector):
-                return frame
-        except PlaywrightError:
-            continue
-    raise FormError(f"Couldn't find an application form at {url}. The job may have closed.")
+    deadline = time.monotonic() + FORM_WAIT_S
+    while True:
+        for frame in page.frames:
+            try:
+                if frame.evaluate("(selector) => document.querySelector(selector) !== null", layout.form):
+                    return frame
+            except PlaywrightError:
+                continue
+        if time.monotonic() > deadline:
+            raise FormError(f"Couldn't find an application form at {url}. The job may have closed.")
+        page.wait_for_timeout(250)
 
 
-def raw_fields(frame: Frame, selector: str) -> list[dict[str, Any]]:
+def raw_fields(frame: Frame, layout: FormLayout) -> list[dict[str, Any]]:
     """The form's questions as the page script reads them (custom dropdowns without their options)."""
-    result: list[dict[str, Any]] = frame.evaluate(_READ_FIELDS, selector)
+    result: list[dict[str, Any]] = frame.evaluate(
+        _READ_FIELDS,
+        {"form": layout.form, "question": layout.question, "questionLabel": layout.question_label},
+    )
     return result
 
 
