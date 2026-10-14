@@ -32,8 +32,9 @@ export type TailoredResume = {
   docx_url: string;
 };
 
-/** Where an answer came from: my answer bank, the tailored resume, typed by me in review, or nowhere yet. */
-export type AnswerSource = "bank" | "resume" | "you" | "none";
+/** Where an answer came from: my answer bank, the tailored resume, drafted by the AI, typed by me in review, or
+ * nowhere yet. */
+export type AnswerSource = "bank" | "resume" | "ai" | "you" | "none";
 
 export type FormQuestion = {
   key: string;
@@ -43,7 +44,9 @@ export type FormQuestion = {
   options: string[];
   answer: string | null;
   source: AnswerSource;
-  /** Required and still unanswered, so the application can't be approved. */
+  /** An EEO or demographic question: answered only from my saved choices, never by the AI. */
+  eeo: boolean;
+  /** Required (or EEO) and still unanswered, so the application can't be approved. */
   needs_input: boolean;
 };
 

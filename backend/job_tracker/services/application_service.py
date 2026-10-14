@@ -16,18 +16,19 @@ from job_tracker.clients.claude import LLMError
 from job_tracker.clients.forms import FormError, FormSubmitter, SubmitError
 from job_tracker.clients.libreoffice import MISSING_MESSAGE, ConversionError, LibreOffice
 from job_tracker.database import Database
-from job_tracker.models.answers import FormAnswer
+from job_tracker.models.answers import AnswerCategory, FormAnswer
 from job_tracker.models.application import SENT_STATUSES, Application, ApplicationStatus, TailoredResume
 from job_tracker.models.job import Job
 from job_tracker.models.platform import PLATFORM_NAMES, Platform
 from job_tracker.models.resume import ResumeVersion, SkillLine
-from job_tracker.services.answer_engine import draft_answers, exact_choice
+from job_tracker.services.answer_engine import draft_answers, exact_choice, open_ended
+from job_tracker.services.answer_writer import AnswerWriter
 from job_tracker.services.errors import ConflictError, InvalidRequestError, NotFoundError, SetupIncompleteError
 from job_tracker.services.pricing import estimate_cost
 from job_tracker.services.resume_reader import skill_line
 from job_tracker.services.resume_renderer import render
 from job_tracker.services.resume_service import MASTER_DOCX, ResumeService
-from job_tracker.services.resume_tailor import ResumeTailor, Shorten, TailorRequest, TailorResult
+from job_tracker.services.resume_tailor import ResumeTailor, Shorten, TailorRequest
 from job_tracker.services.run_service import scoring_missing
 from job_tracker.services.settings_service import SettingsService
 
@@ -82,6 +83,10 @@ def _typed(current: FormAnswer, text: str | None) -> FormAnswer:
     return current.answered(answer, "you")
 
 
+def _resume_text(version: ResumeVersion) -> str:
+    return "\n".join(p.text for p in version.paragraphs if p.text)
+
+
 def _lines(version: ResumeVersion) -> dict[int, SkillLine]:
     """The Skills paragraphs that list skills, by paragraph index, in order."""
     texts = [p.text for p in version.paragraphs]
@@ -123,6 +128,7 @@ class ApplicationService:
         settings: SettingsService,
         resumes: ResumeService,
         tailor: ResumeTailor,
+        writer: AnswerWriter,
         office: LibreOffice,
         forms: dict[Platform, FormSubmitter],
     ) -> None:
@@ -131,6 +137,7 @@ class ApplicationService:
         self._settings = settings
         self._resumes = resumes
         self._tailor = tailor
+        self._writer = writer
         self._office = office
         self._forms = forms
         self._apply_lock = threading.Lock()
@@ -192,6 +199,7 @@ class ApplicationService:
         try:
             form = self._read_form(job)
             resume = self._tailor_resume(application_id, job, directory)
+            answers = self._draft_open_ended(application_id, job, form.answers)
         except (LLMError, TailoringError, ConversionError, FormError) as error:
             self._fail(application_id, directory, error.message)
             return
@@ -203,7 +211,7 @@ class ApplicationService:
             saved = uow.applications.set_status(application_id, "in_review", _now())
             if saved:
                 uow.applications.save_resume(application_id, job.id, resume, _now())
-                uow.applications.save_answers(application_id, form.answers, form.error, _now())
+                uow.applications.save_answers(application_id, answers, form.error, _now())
                 uow.answer_bank.mark_used(form.used, _now())
         if not saved:
             shutil.rmtree(self._dir / directory, ignore_errors=True)
@@ -219,6 +227,30 @@ class ApplicationService:
         drafted = draft_answers(fields, bank)
         return _Form(drafted.answers, drafted.used, None)
 
+    def _draft_open_ended(
+        self, application_id: int, job: Job, answers: list[FormAnswer] | None
+    ) -> list[FormAnswer] | None:
+        """The answers with AI drafts for the open-ended questions the bank didn't answer. EEO questions are never
+        sent; if drafting fails, the questions are left for me."""
+        questions = [answer.field for answer in answers or [] if open_ended(answer)]
+        if answers is None or not questions:
+            return answers
+        ai = self._settings.ai()
+        version = self._resumes.current()
+        assert ai.anthropic_api_key is not None and version is not None
+        try:
+            result = self._writer.draft(ai.anthropic_api_key, ai.tailoring_model, _resume_text(version), job, questions)
+        except LLMError as error:
+            log.warning("drafting answers for application %s failed: %s", application_id, error.message)
+            return answers
+        self._record_usage("answers", application_id, job.id, result.model, result.input_tokens, result.output_tokens)
+        return [
+            answer.answered(result.answers[answer.field.key], "ai")
+            if open_ended(answer) and answer.field.key in result.answers
+            else answer
+            for answer in answers
+        ]
+
     def answer(self, application_id: int, answers: dict[str, str | None]) -> Application:
         """Save answers I typed in review; a blank answer clears the question."""
         with self._edit_lock:
@@ -233,6 +265,35 @@ class ApplicationService:
                 by_key[key] = _typed(current, text)
             with self._db.transaction() as uow:
                 uow.applications.save_answers(application_id, list(by_key.values()), application.form_error, _now())
+        return self.get(application_id)
+
+    def save_to_bank(self, application_id: int, key: str) -> Application:
+        """Save the question's current answer into my answer bank, replacing my saved answer to the same question;
+        an EEO question's answer is saved as an EEO choice."""
+        with self._edit_lock:
+            application = self.get(application_id)
+            if not application.editable or application.answers is None:
+                raise ConflictError("Only the answers of an application in review can be saved.")
+            current = next((answer for answer in application.answers if answer.field.key == key), None)
+            if current is None:
+                raise InvalidRequestError(f"This form has no question “{key}”.")
+            if current.field.kind == "file" or current.answer is None:
+                raise InvalidRequestError(f"Answer “{current.field.label}” before saving it.")
+            question = current.field.label
+            category: AnswerCategory = "eeo" if current.eeo else "other"
+            answers = [
+                answer.answered(answer.answer, "bank") if answer is current else answer
+                for answer in application.answers
+            ]
+            with self._db.transaction() as uow:
+                same = next((e for e in uow.answer_bank.list() if e.question.casefold() == question.casefold()), None)
+                if same is None:
+                    entry_id = uow.answer_bank.create(question, current.answer, category, _now())
+                else:
+                    entry_id = same.id
+                    uow.answer_bank.update(same.id, same.question, current.answer, same.category)
+                uow.answer_bank.mark_used({entry_id}, _now())
+                uow.applications.save_answers(application_id, answers, application.form_error, _now())
         return self.get(application_id)
 
     def approve(self, application_id: int) -> Application:
@@ -351,7 +412,7 @@ class ApplicationService:
         assert version.summary_paragraphs is not None
         texts = [p.text for p in version.paragraphs]
         request = TailorRequest(
-            resume_text="\n".join(text for text in texts if text),
+            resume_text=_resume_text(version),
             summary=[texts[index] for index in version.summary_paragraphs],
             skills=list(_lines(version).values()),
             allowed_skills=version.skills,
@@ -363,7 +424,9 @@ class ApplicationService:
         shorten: Shorten | None = None
         for _ in range(2):
             result = self._tailor.tailor(ai.anthropic_api_key, ai.tailoring_model, request, shorten)
-            self._record_usage(application_id, job.id, result)
+            self._record_usage(
+                "tailoring", application_id, job.id, result.model, result.input_tokens, result.output_tokens
+            )
             pages, text = self._render(version, result.summary, result.skills, target)
             if pages <= version.page_count:
                 break
@@ -389,10 +452,10 @@ class ApplicationService:
             master_page_count=version.page_count,
         )
 
-    def _record_usage(self, application_id: int, job_id: int, result: TailorResult) -> None:
-        cost = estimate_cost(result.model, result.input_tokens, result.output_tokens)
+    def _record_usage(
+        self, kind: str, application_id: int, job_id: int, model: str, input_tokens: int, output_tokens: int
+    ) -> None:
+        cost = estimate_cost(model, input_tokens, output_tokens)
         with self._db.transaction() as uow:
-            uow.scores.record_usage(
-                "tailoring", None, job_id, result.model, result.input_tokens, result.output_tokens, cost, _now()
-            )
+            uow.scores.record_usage(kind, None, job_id, model, input_tokens, output_tokens, cost, _now())
             uow.applications.add_cost(application_id, cost)

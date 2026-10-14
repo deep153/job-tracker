@@ -4,12 +4,14 @@
 
 **Blocked by:** 11 (Answer bank and reading the Greenhouse form)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Open-ended questions without a bank match get an AI draft labelled "AI-drafted"
-- [ ] Questions the engine can't confidently answer remain "needs input"
-- [ ] EEO/demographic questions are never sent to the LLM; they use saved choices or are flagged as needs input
-- [ ] An answer typed in review can be saved to the answer bank with one action
-- [ ] Test: an open-ended question gets the fake LLM's draft with the "AI-drafted" label
-- [ ] Test: an EEO question with no saved choice is flagged as needs input and the fake LLM receives no call for it
-- [ ] Test: an answer saved from review is matched from the bank on the next application
+- [x] Open-ended questions without a bank match get an AI draft labelled "AI-drafted"
+- [x] Questions the engine can't confidently answer remain "needs input"
+- [x] EEO/demographic questions are never sent to the LLM; they use saved choices or are flagged as needs input
+- [x] An answer typed in review can be saved to the answer bank with one action
+- [x] Test: an open-ended question gets the fake LLM's draft with the "AI-drafted" label
+- [x] Test: an EEO question with no saved choice is flagged as needs input and the fake LLM receives no call for it
+- [x] Test: an answer saved from review is matched from the bank on the next application
+
+**Notes:** Open-ended means an unanswered free-text question that's a textarea, ends in "?", or has six or more words; they go to the Answer Writer in one call with the tailoring (writing) model, and its cost shows as "Open-ended answers". The model answers null for anything it can't answer from the resume and the posting, which stays "needs input"; if the call fails, every one of them does. EEO questions are recognized by their label (gender, race, ethnicity, veteran, disability, pronouns, sexual orientation, self-identification…), never sent, and flagged as needs input even when optional, so approving waits for a deliberate choice (declining included). "Save to answer bank" (`POST /api/applications/{id}/answers/save-to-bank`) saves the question as worded on the form, as an EEO choice for EEO questions and "other" otherwise, replacing my saved answer to the same question.

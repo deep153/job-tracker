@@ -59,5 +59,6 @@ def _question_json(answer: FormAnswer) -> dict[str, Any]:
         **asdict(answer.field),
         "answer": answer.answer,
         "source": answer.source,
+        "eeo": answer.eeo,
         "needs_input": answer.needs_input,
     }

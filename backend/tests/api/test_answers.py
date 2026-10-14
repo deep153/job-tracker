@@ -116,7 +116,7 @@ def test_applying_reads_the_greenhouse_form_and_answers_from_the_bank(
         ),
         (WHY, "Why do you want to work at Globex?", "textarea", True, None, "none", True),
         ("gender", "Gender", "select", False, "Decline To Self Identify", "bank", False),
-        ("veteran_status", "Veteran Status", "radio", False, None, "none", False),
+        ("veteran_status", "Veteran Status", "radio", False, None, "none", True),
     ]
     by_key = {q["key"]: q for q in application["questions"]}
     assert by_key["gender"]["options"] == ["Male", "Female", "Decline To Self Identify"]
@@ -148,10 +148,18 @@ def test_approve_is_refused_while_a_required_question_needs_input(client: TestCl
     refused = client.post(f"/api/applications/{application['id']}/approve")
 
     assert refused.status_code == 409
-    assert refused.json()["detail"] == "Answer the required questions first: “Why do you want to work at Globex?”."
+    assert refused.json()["detail"] == (
+        "Answer these questions first: “Why do you want to work at Globex?”, “Veteran Status”."
+    )
     answered = client.put(
         f"/api/applications/{application['id']}/answers",
-        json={"answers": {WHY: "I want to build payment systems at Globex's scale.", "phone": "555-0100"}},
+        json={
+            "answers": {
+                WHY: "I want to build payment systems at Globex's scale.",
+                "phone": "555-0100",
+                "veteran_status": "I don't wish to answer",
+            }
+        },
     ).json()
     by_key = {q["key"]: (q["answer"], q["source"], q["needs_input"]) for q in answered["questions"]}
     assert by_key[WHY] == ("I want to build payment systems at Globex's scale.", "you", False)

@@ -14,6 +14,10 @@ export const editTailoredResume = (id: number, edits: { summary: string[]; skill
 export const answerQuestions = (id: number, answers: Record<string, string>) =>
   request<Application>(`/api/applications/${id}/answers`, sendJson("PUT", { answers }));
 
+/** Saves the question's current answer into my answer bank, so later applications are answered with it. */
+export const saveAnswerToBank = (id: number, key: string) =>
+  request<Application>(`/api/applications/${id}/answers/save-to-bank`, sendJson("POST", { key }));
+
 /** Refused while anything still needs fixing, such as a required question with no answer. */
 export const approveApplication = (id: number) =>
   request<Application>(`/api/applications/${id}/approve`, { method: "POST" });

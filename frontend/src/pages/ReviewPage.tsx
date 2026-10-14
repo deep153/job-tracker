@@ -6,6 +6,7 @@ import {
   cancelApplication,
   editTailoredResume,
   getApplication,
+  saveAnswerToBank,
 } from "../api/applications";
 import { AlertIcon, CheckIcon, DownloadIcon, ExternalIcon } from "../components/icons";
 import { answerDraft, changedAnswers, QuestionsPanel } from "../components/QuestionsPanel";
@@ -267,6 +268,7 @@ function InReview({
   const [busy, setBusy] = useState<"regenerate" | "answers" | "save" | "approve" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [answersError, setAnswersError] = useState<string | null>(null);
+  const [savingToBank, setSavingToBank] = useState<string | null>(null);
   const [approveError, setApproveError] = useState<string | null>(null);
   const dirty = JSON.stringify(editsFrom(draft)) !== JSON.stringify(editsFrom(draftFrom(resume)));
   const changed = changedAnswers(questions, answers);
@@ -300,6 +302,18 @@ function InReview({
       return false;
     } finally {
       setBusy(null);
+    }
+  }
+
+  async function saveToBank(key: string) {
+    setSavingToBank(key);
+    setAnswersError(null);
+    try {
+      onSaved(await saveAnswerToBank(application.id, key));
+    } catch (e) {
+      setAnswersError((e as Error).message);
+    } finally {
+      setSavingToBank(null);
     }
   }
 
@@ -410,7 +424,9 @@ function InReview({
                 setAnswers(answerDraft(questions));
                 setAnswersError(null);
               }}
+              onSaveToBank={(key) => void saveToBank(key)}
               saving={busy === "answers"}
+              savingToBank={savingToBank}
               error={answersError}
             />
           )}
