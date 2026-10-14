@@ -1,3 +1,4 @@
+import json
 import re
 import threading
 from dataclasses import dataclass
@@ -18,6 +19,19 @@ class LLMCall:
     def is_tailoring(self) -> bool:
         return "summary" in self.schema.get("properties", {})
 
+    @property
+    def is_answering(self) -> bool:
+        return "answers" in self.schema.get("properties", {})
+
+    @property
+    def is_scoring(self) -> bool:
+        return not self.is_tailoring and not self.is_answering
+
+    @property
+    def questions(self) -> list[str]:
+        """The questions an answering prompt asks to draft."""
+        return [question["question"] for question in _questions(self.prompt)]
+
 
 DEFAULT_TAILORED_SUMMARY = "Backend engineer who builds reliable payment APIs in Python and Go."
 
@@ -29,6 +43,7 @@ class FakeLLM:
     stock reasons and keywords unless `score` or `answer` scripted something else for that title.
     Tailoring prompts get the answers queued with `tailor`, in order, then a stock answer that rewrites the
     summary and leaves the skills lines as they are.
+    Answering prompts get the drafts scripted with `draft` for their questions, and no answer for the rest.
     """
 
     INPUT_TOKENS = 1000
@@ -37,6 +52,7 @@ class FakeLLM:
     def __init__(self) -> None:
         self._answers: dict[str, dict[str, Any] | LLMError] = {}
         self._tailorings: list[dict[str, Any] | LLMError] = []
+        self._drafts: dict[str, str] = {}
         self._failure: LLMError | None = None
         self._lock = threading.Lock()
         self.calls: list[LLMCall] = []
@@ -57,15 +73,22 @@ class FakeLLM:
         """Answer the next tailoring prompts with these outputs (or raise these errors), in order."""
         self._tailorings.extend(answers)
 
+    def draft(self, question: str, answer: str) -> None:
+        """Answer this question with `answer` when asked to draft it."""
+        self._drafts[question] = answer
+
     def fail(self, error: LLMError | None) -> None:
         """Every call raises `error` from now on (or, given None, answers normally again)."""
         self._failure = error
 
     def scored_titles(self) -> list[str]:
-        return sorted(_title(call.prompt) for call in self.calls if not call.is_tailoring)
+        return sorted(_title(call.prompt) for call in self.calls if call.is_scoring)
 
     def tailoring_calls(self) -> list[LLMCall]:
         return [call for call in self.calls if call.is_tailoring]
+
+    def answering_calls(self) -> list[LLMCall]:
+        return [call for call in self.calls if call.is_answering]
 
     def generate(
         self, *, api_key: str, model: str, system: str, prompt: str, schema: dict[str, Any], max_tokens: int
@@ -76,6 +99,12 @@ class FakeLLM:
             tailored = self._tailorings.pop(0) if call.is_tailoring and self._tailorings else None
         if self._failure is not None:
             raise self._failure
+        if call.is_answering:
+            drafts = [
+                {"key": question["key"], "answer": self._drafts.get(question["question"])}
+                for question in _questions(prompt)
+            ]
+            return LLMResponse({"answers": drafts}, model, self.INPUT_TOKENS, self.OUTPUT_TOKENS)
         answer = tailored if call.is_tailoring else self._answers.get(_title(prompt))
         if isinstance(answer, LLMError):
             raise answer
@@ -89,6 +118,13 @@ class FakeLLM:
                 "missing_keywords": ["Kafka"],
             }
         return LLMResponse(answer, model, self.INPUT_TOKENS, self.OUTPUT_TOKENS)
+
+
+def _questions(prompt: str) -> list[dict[str, str]]:
+    match = re.search(r"<questions>\n(.+)\n</questions>", prompt, re.S)
+    assert match, "not an answering prompt"
+    questions: list[dict[str, str]] = json.loads(match[1])
+    return questions
 
 
 def _title(prompt: str) -> str:

@@ -209,6 +209,11 @@ def _application(row: sqlite3.Row) -> Application:
 
 def _answers(value: str) -> list[FormAnswer]:
     return [
-        FormAnswer(field=FormField(**answer["field"]), answer=answer["answer"], source=answer["source"])
+        FormAnswer(
+            field=FormField(**answer["field"]),
+            answer=answer["answer"],
+            source=answer["source"],
+            eeo=answer.get("eeo", False),
+        )
         for answer in json.loads(value)
     ]

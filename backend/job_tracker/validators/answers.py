@@ -17,3 +17,9 @@ class FormAnswersIn(BaseModel):
     """Answers I typed in review, by question key; an empty or null answer clears it."""
 
     answers: dict[Annotated[str, Field(max_length=200)], AnswerText | None] = Field(max_length=500)
+
+
+class SaveToBankIn(BaseModel):
+    """The question whose current answer to save into my answer bank."""
+
+    key: str = Field(max_length=200)

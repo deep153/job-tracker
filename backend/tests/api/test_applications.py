@@ -74,7 +74,7 @@ def test_applying_tailors_the_resume_and_opens_the_review(
     assert call.model == "claude-sonnet-5-5"
     assert "never invent" in call.system.lower()
     assert application["cost_usd"] > 0
-    [_, tailoring_costs] = client.get("/api/settings/costs").json()["by_kind"]
+    [tailoring_costs] = [k for k in client.get("/api/settings/costs").json()["by_kind"] if k["kind"] == "tailoring"]
     assert (tailoring_costs["kind"], tailoring_costs["calls"]) == ("tailoring", 1)
     assert client.get(f"/api/jobs/{job_id}").json()["application"] == {"id": application["id"], "status": "in_review"}
 
@@ -130,7 +130,7 @@ def test_a_summary_too_long_to_fit_is_shortened_and_retried(
     pdf = client.get(f"/api/applications/{application['id']}/resume.pdf").content
     assert page_count(pdf) == 1
     assert TAILORED in pdf_text(pdf)
-    [_, tailoring_costs] = client.get("/api/settings/costs").json()["by_kind"]
+    [tailoring_costs] = [k for k in client.get("/api/settings/costs").json()["by_kind"] if k["kind"] == "tailoring"]
     assert tailoring_costs["calls"] == 2
 
 

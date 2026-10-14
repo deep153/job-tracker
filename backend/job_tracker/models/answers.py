@@ -8,9 +8,9 @@ ANSWER_CATEGORIES: tuple[str, ...] = get_args(AnswerCategory)
 
 FieldKind = Literal["text", "textarea", "select", "radio", "checkbox", "file"]
 
-# Where an answer came from: my answer bank, the tailored resume (for the resume upload), typed by me in
-# review, or nowhere yet.
-AnswerSource = Literal["bank", "resume", "you", "none"]
+# Where an answer came from: my answer bank, the tailored resume (for the resume upload), drafted by the AI from
+# my resume and the job, typed by me in review, or nowhere yet.
+AnswerSource = Literal["bank", "resume", "ai", "you", "none"]
 
 
 @dataclass(frozen=True)
@@ -41,10 +41,12 @@ class FormAnswer:
     field: FormField
     answer: str | None
     source: AnswerSource
+    eeo: bool = False  # an EEO or demographic question, answered only from my saved choices
 
     @property
     def needs_input(self) -> bool:
-        return self.field.required and self.answer is None
+        """Required, or an EEO question (which I answer deliberately, even if only to decline), and unanswered."""
+        return (self.field.required or self.eeo) and self.answer is None
 
     def answered(self, answer: str | None, source: AnswerSource) -> "FormAnswer":
         return replace(self, answer=answer, source=source if answer is not None else "none")

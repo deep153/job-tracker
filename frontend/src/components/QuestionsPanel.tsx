@@ -23,6 +23,7 @@ function SourceBadge({ question }: { question: FormQuestion }) {
   if (question.needs_input) return <span className="badge badge-warning">Needs input</span>;
   if (question.source === "bank") return <span className="badge badge-green">From answer bank</span>;
   if (question.source === "resume") return <span className="badge badge-green">Tailored resume</span>;
+  if (question.source === "ai") return <span className="badge badge-ai">AI-drafted</span>;
   if (question.source === "you") return <span className="badge">Your answer</span>;
   return <span className="badge badge-muted">Optional</span>;
 }
@@ -79,7 +80,9 @@ export function QuestionsPanel({
   onChange,
   onSave,
   onUndo,
+  onSaveToBank,
   saving,
+  savingToBank,
   error,
 }: {
   questions: FormQuestion[];
@@ -87,10 +90,14 @@ export function QuestionsPanel({
   onChange: (draft: AnswerDraft) => void;
   onSave: () => void;
   onUndo: () => void;
+  onSaveToBank: (key: string) => void;
   saving: boolean;
+  /** The question whose answer is being saved into the answer bank. */
+  savingToBank: string | null;
   error: string | null;
 }) {
-  const dirty = Object.keys(changedAnswers(questions, draft)).length > 0;
+  const changed = changedAnswers(questions, draft);
+  const dirty = Object.keys(changed).length > 0;
   const needInput = questions.filter((q) => q.needs_input).length;
   return (
     <section className="panel" aria-labelledby="questions-heading">
@@ -125,6 +132,24 @@ export function QuestionsPanel({
               value={draft[question.key] ?? ""}
               onChange={(value) => onChange({ ...draft, [question.key]: value })}
             />
+            {question.eeo && question.needs_input && (
+              <p className="question-note">
+                Voluntary self-identification is answered only from your saved choices, never by AI. Choose an answer
+                (declining is fine).
+              </p>
+            )}
+            {(question.source === "you" || question.source === "ai") && !(question.key in changed) && (
+              <button
+                type="button"
+                className="button button-ghost button-tiny question-save"
+                onClick={() => onSaveToBank(question.key)}
+                disabled={savingToBank !== null || saving}
+                aria-busy={savingToBank === question.key}
+              >
+                {savingToBank === question.key && <span className="spinner spinner-dark" aria-hidden="true" />}
+                Save to answer bank
+              </button>
+            )}
           </div>
         ))}
         {error && (

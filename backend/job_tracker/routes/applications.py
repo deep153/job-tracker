@@ -7,7 +7,7 @@ from job_tracker.routes.dependencies import ServicesDep
 from job_tracker.routes.resume import DOCX_TYPE
 from job_tracker.serializers.applications import application_json
 from job_tracker.services.application_service import TAILORED_DOCX, TAILORED_PDF
-from job_tracker.validators.answers import FormAnswersIn
+from job_tracker.validators.answers import FormAnswersIn, SaveToBankIn
 from job_tracker.validators.applications import TailoredResumeIn
 
 router = APIRouter(prefix="/api", tags=["applications"])
@@ -37,6 +37,14 @@ def edit_tailored_resume(application_id: int, body: TailoredResumeIn, services: 
 @router.put("/applications/{application_id}/answers")
 def answer_questions(application_id: int, body: FormAnswersIn, services: ServicesDep) -> dict[str, Any]:
     application = services.applications.answer(application_id, body.answers)
+    return application_json(application, services.jobs.get(application.job_id))
+
+
+@router.post("/applications/{application_id}/answers/save-to-bank")
+def save_answer_to_bank(application_id: int, body: SaveToBankIn, services: ServicesDep) -> dict[str, Any]:
+    """Saves the question's current answer into my answer bank (replacing my saved answer to the same question),
+    so later applications are answered with it."""
+    application = services.applications.save_to_bank(application_id, body.key)
     return application_json(application, services.jobs.get(application.job_id))
 
 

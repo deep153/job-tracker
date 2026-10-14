@@ -66,7 +66,7 @@ class Application:
 
     @property
     def unanswered(self) -> list[FormAnswer]:
-        """Required questions that still need my input."""
+        """Questions that still need my input: required ones, and EEO questions I have no saved choice for."""
         return [answer for answer in self.answers or [] if answer.needs_input]
 
     @property
@@ -80,7 +80,7 @@ class Application:
             return self.form_error
         if self.unanswered:
             labels = ", ".join(f"“{answer.field.label}”" for answer in self.unanswered)
-            return f"Answer the required questions first: {labels}."
+            return f"Answer these questions first: {labels}."
         if self.resume.page_count > self.resume.master_page_count:
             return (
                 f"The tailored resume runs to {self.resume.page_count} pages, longer than your "

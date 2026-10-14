@@ -10,7 +10,11 @@ import { formatCost, fullDate, timeAgo } from "../utils/format";
 
 const ANTHROPIC_CONSOLE = "https://console.anthropic.com/settings/keys";
 
-const KIND_LABELS: Record<string, string> = { scoring: "Fit scoring", tailoring: "Resume tailoring" };
+const KIND_LABELS: Record<string, string> = {
+  scoring: "Fit scoring",
+  tailoring: "Resume tailoring",
+  answers: "Open-ended answers",
+};
 
 export function SettingsPage() {
   const [settings, setSettings] = useState<AiSettings | null>(null);

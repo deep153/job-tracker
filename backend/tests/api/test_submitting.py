@@ -15,7 +15,13 @@ def reviewed(client: TestClient, boards: FakeJobBoards, **variants: bool) -> dic
     application = apply(client, scored_job(client, boards, form="greenhouse.html", variants=variants))
     response = client.put(
         f"/api/applications/{application['id']}/answers",
-        json={"answers": {WHY: "I want to build payment systems at Globex's scale.", "gender": "Female"}},
+        json={
+            "answers": {
+                WHY: "I want to build payment systems at Globex's scale.",
+                "gender": "Female",
+                "veteran_status": "I don't wish to answer",
+            }
+        },
     )
     assert response.json()["can_approve"], response.text
     return dict(response.json())
@@ -53,6 +59,7 @@ def test_approving_submits_the_reviewed_answers_and_the_tailored_pdf(client: Tes
         "question_4003": "No",
         WHY: "I want to build payment systems at Globex's scale.",
         "gender": "Female",
+        "veteran_status": "3",
         "fingerprint": "abc123",
     }
     pdf = client.get(f"/api/applications/{application['id']}/resume.pdf").content
