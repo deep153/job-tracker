@@ -94,7 +94,7 @@ def test_applying_reads_the_greenhouse_form_and_answers_from_the_bank(
         ("country", "Country", "select", True, "United States +1", "bank", False),
         ("phone", "Phone", "text", False, None, "none", False),
         ("resume", "Resume/CV", "file", True, "Tailored resume (PDF)", "resume", False),
-        ("cover_letter", "Cover Letter", "file", False, None, "none", False),
+        ("cover_letter", "Cover Letter", "file", False, "Tailored cover letter (PDF)", "cover_letter", False),
         ("question_4001", "LinkedIn Profile", "text", False, "https://linkedin.com/in/jrivera", "bank", False),
         (
             "question_4002",

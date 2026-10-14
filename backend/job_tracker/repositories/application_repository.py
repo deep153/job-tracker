@@ -151,6 +151,11 @@ class ApplicationRepository:
         )
         self._conn.execute("UPDATE applications SET updated_at = ? WHERE id = ?", (now, application_id))
 
+    def save_cover_letter(self, application_id: int, cover_letter: str | None, now: str) -> None:
+        self._conn.execute(
+            "UPDATE applications SET cover_letter = ?, updated_at = ? WHERE id = ?", (cover_letter, now, application_id)
+        )
+
     def save_answers(
         self, application_id: int, answers: list[FormAnswer] | None, form_error: str | None, now: str
     ) -> None:
@@ -204,6 +209,7 @@ def _application(row: sqlite3.Row) -> Application:
         form_error=row["form_error"],
         submitted_at=row["submitted_at"],
         screenshot=bool(row["screenshot"]),
+        cover_letter=row["cover_letter"],
     )
 
 

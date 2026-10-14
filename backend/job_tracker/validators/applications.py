@@ -6,6 +6,10 @@ SummaryText = Annotated[str, Field(max_length=5000)]
 Skill = Annotated[str, Field(max_length=200)]
 
 
+class CoverLetterIn(BaseModel):
+    text: str = Field(max_length=10_000)
+
+
 class TailoredResumeIn(BaseModel):
     """My edits in review: one text per Summary paragraph, and the skills for each skills line."""
 

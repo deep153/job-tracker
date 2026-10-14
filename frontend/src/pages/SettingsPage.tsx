@@ -14,6 +14,7 @@ const KIND_LABELS: Record<string, string> = {
   scoring: "Fit scoring",
   tailoring: "Resume tailoring",
   answers: "Open-ended answers",
+  cover_letter: "Cover letters",
 };
 
 export function SettingsPage() {

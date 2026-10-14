@@ -4,11 +4,13 @@ import {
   applyToJob,
   approveApplication,
   cancelApplication,
+  editCoverLetter,
   editTailoredResume,
   getApplication,
   saveAnswerToBank,
 } from "../api/applications";
 import { AlertIcon, CheckIcon, DownloadIcon, ExternalIcon } from "../components/icons";
+import { CoverLetterPanel } from "../components/CoverLetterPanel";
 import { answerDraft, changedAnswers, QuestionsPanel } from "../components/QuestionsPanel";
 import { ScoreBadge } from "../components/Score";
 import { Topbar } from "../components/Topbar";
@@ -265,7 +267,9 @@ function InReview({
   const questions = application.questions ?? [];
   const [draft, setDraft] = useState(() => draftFrom(resume));
   const [answers, setAnswers] = useState(() => answerDraft(questions));
-  const [busy, setBusy] = useState<"regenerate" | "answers" | "save" | "approve" | null>(null);
+  const [letter, setLetter] = useState(application.cover_letter?.text ?? "");
+  const [letterError, setLetterError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<"regenerate" | "answers" | "letter" | "save" | "approve" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [answersError, setAnswersError] = useState<string | null>(null);
   const [savingToBank, setSavingToBank] = useState<string | null>(null);
@@ -273,6 +277,7 @@ function InReview({
   const dirty = JSON.stringify(editsFrom(draft)) !== JSON.stringify(editsFrom(draftFrom(resume)));
   const changed = changedAnswers(questions, answers);
   const answersDirty = Object.keys(changed).length > 0;
+  const letterDirty = application.cover_letter !== null && letter.trim() !== application.cover_letter.text;
 
   async function regenerate(then?: () => void) {
     setBusy(then ? "save" : "regenerate");
@@ -305,6 +310,22 @@ function InReview({
     }
   }
 
+  async function saveLetter(): Promise<boolean> {
+    setBusy("letter");
+    setLetterError(null);
+    try {
+      const saved = await editCoverLetter(application.id, letter);
+      onSaved(saved);
+      setLetter(saved.cover_letter?.text ?? "");
+      return true;
+    } catch (e) {
+      setLetterError((e as Error).message);
+      return false;
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function saveToBank(key: string) {
     setSavingToBank(key);
     setAnswersError(null);
@@ -322,6 +343,7 @@ function InReview({
       window.location.hash = "#/";
     };
     if (answersDirty && !(await saveAnswers())) return;
+    if (letterDirty && !(await saveLetter())) return;
     if (dirty) void regenerate(exit);
     else exit();
   }
@@ -337,7 +359,7 @@ function InReview({
     }
   }
 
-  const unsaved = dirty || answersDirty;
+  const unsaved = dirty || answersDirty || letterDirty;
   const approveBlocker = unsaved ? "Save your changes first." : application.approval_problem;
 
   return (
@@ -428,6 +450,23 @@ function InReview({
               saving={busy === "answers"}
               savingToBank={savingToBank}
               error={answersError}
+            />
+          )}
+          {application.cover_letter && (
+            <CoverLetterPanel
+              letter={application.cover_letter}
+              draft={letter}
+              onChange={(next) => {
+                setLetter(next);
+                setLetterError(null);
+              }}
+              onSave={() => void saveLetter()}
+              onUndo={() => {
+                setLetter(application.cover_letter?.text ?? "");
+                setLetterError(null);
+              }}
+              saving={busy === "letter"}
+              error={letterError}
             />
           )}
           <section className="panel" aria-labelledby="edit-heading">

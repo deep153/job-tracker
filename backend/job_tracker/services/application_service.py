@@ -23,6 +23,7 @@ from job_tracker.models.platform import PLATFORM_NAMES, Platform
 from job_tracker.models.resume import ResumeVersion, SkillLine
 from job_tracker.services.answer_engine import draft_answers, exact_choice, open_ended
 from job_tracker.services.answer_writer import AnswerWriter
+from job_tracker.services.cover_letter_writer import CoverLetterWriter, as_docx, tidy
 from job_tracker.services.errors import ConflictError, InvalidRequestError, NotFoundError, SetupIncompleteError
 from job_tracker.services.pricing import estimate_cost
 from job_tracker.services.resume_reader import skill_line
@@ -36,6 +37,7 @@ log = logging.getLogger(__name__)
 
 TAILORED_DOCX = "resume.docx"
 TAILORED_PDF = "resume.pdf"
+COVER_LETTER_PDF = "cover-letter.pdf"
 SCREENSHOT = "screenshot.png"
 INTERRUPTED = "Tailoring was interrupted because the server stopped. Try again."
 SUBMIT_INTERRUPTED = (
@@ -70,6 +72,8 @@ class _Form:
 
 def _typed(current: FormAnswer, text: str | None) -> FormAnswer:
     field = current.field
+    if current.source == "cover_letter":
+        raise InvalidRequestError(f"“{field.label}” is filled with your cover letter; edit the letter instead.")
     if field.kind == "file":
         if current.source == "resume":
             raise InvalidRequestError(f"“{field.label}” is filled with your tailored resume.")
@@ -129,6 +133,7 @@ class ApplicationService:
         resumes: ResumeService,
         tailor: ResumeTailor,
         writer: AnswerWriter,
+        letters: CoverLetterWriter,
         office: LibreOffice,
         forms: dict[Platform, FormSubmitter],
     ) -> None:
@@ -138,6 +143,7 @@ class ApplicationService:
         self._resumes = resumes
         self._tailor = tailor
         self._writer = writer
+        self._letters = letters
         self._office = office
         self._forms = forms
         self._apply_lock = threading.Lock()
@@ -200,6 +206,7 @@ class ApplicationService:
             form = self._read_form(job)
             resume = self._tailor_resume(application_id, job, directory)
             answers = self._draft_open_ended(application_id, job, form.answers)
+            cover_letter = self._write_cover_letter(application_id, job, answers, directory)
         except (LLMError, TailoringError, ConversionError, FormError) as error:
             self._fail(application_id, directory, error.message)
             return
@@ -212,6 +219,7 @@ class ApplicationService:
             if saved:
                 uow.applications.save_resume(application_id, job.id, resume, _now())
                 uow.applications.save_answers(application_id, answers, form.error, _now())
+                uow.applications.save_cover_letter(application_id, cover_letter, _now())
                 uow.answer_bank.mark_used(form.used, _now())
         if not saved:
             shutil.rmtree(self._dir / directory, ignore_errors=True)
@@ -250,6 +258,50 @@ class ApplicationService:
             else answer
             for answer in answers
         ]
+
+    def _write_cover_letter(
+        self, application_id: int, job: Job, answers: list[FormAnswer] | None, directory: str
+    ) -> str | None:
+        """A cover letter, only when the form has a field for it; also as a PDF when the form takes a file."""
+        fields = [answer.field for answer in answers or [] if answer.source == "cover_letter"]
+        if not fields:
+            return None
+        ai = self._settings.ai()
+        version = self._resumes.current()
+        assert ai.anthropic_api_key is not None and version is not None
+        result = self._letters.write(ai.anthropic_api_key, ai.tailoring_model, _resume_text(version), job)
+        self._record_usage(
+            "cover_letter", application_id, job.id, result.model, result.input_tokens, result.output_tokens
+        )
+        if any(field.kind == "file" for field in fields):
+            self._cover_letter_pdf(result.text, self._dir / directory)
+        return result.text
+
+    def _cover_letter_pdf(self, text: str, target: Path) -> None:
+        draft = target / f"{uuid.uuid4().hex}.docx"
+        draft.write_bytes(as_docx(text))
+        try:
+            os.replace(self._office.convert_to_pdf(draft, target), target / COVER_LETTER_PDF)
+        finally:
+            draft.unlink(missing_ok=True)
+            draft.with_suffix(".pdf").unlink(missing_ok=True)
+
+    def edit_cover_letter(self, application_id: int, text: str) -> Application:
+        """Save my edited cover letter (and remake its PDF when the form takes a file)."""
+        with self._edit_lock:
+            application = self.get(application_id)
+            if not application.editable or application.resume is None:
+                raise ConflictError("Only the cover letter of an application in review can be edited.")
+            if application.cover_letter is None:
+                raise ConflictError("This application form has no cover letter field.")
+            text = tidy(text)
+            if not text:
+                raise InvalidRequestError("Write the cover letter.")
+            if application.cover_letter_file:
+                self._cover_letter_pdf(text, self._dir / application.resume.directory)
+            with self._db.transaction() as uow:
+                uow.applications.save_cover_letter(application_id, text, _now())
+        return self.get(application_id)
 
     def answer(self, application_id: int, answers: dict[str, str | None]) -> Application:
         """Save answers I typed in review; a blank answer clears the question."""
@@ -313,6 +365,12 @@ class ApplicationService:
         threading.Thread(target=self._submit_in_background, args=(application, job), daemon=True).start()
         return self.get(application_id)
 
+    def cover_letter_pdf(self, application_id: int) -> Path:
+        application = self.get(application_id)
+        if not application.cover_letter_file or application.resume is None:
+            raise NotFoundError("This application has no cover letter file.")
+        return self._dir / application.resume.directory / COVER_LETTER_PDF
+
     def screenshot(self, application_id: int) -> Path:
         application = self.get(application_id)
         if not application.screenshot or application.resume is None:
@@ -328,11 +386,19 @@ class ApplicationService:
             with self._db.transaction() as uow:
                 uow.applications.finish_submitting(application.id, "needs_manual", _now(), f"{reason} {HANDOVER}")
 
+        # A cover letter text box gets the letter itself, as it is now.
+        answers = [
+            answer.answered(application.cover_letter, "cover_letter")
+            if answer.source == "cover_letter" and answer.field.kind != "file"
+            else answer
+            for answer in application.answers
+        ]
         try:
             outcome = self._forms[job.posting.platform].submit(
                 job.posting.application_url,
-                application.answers,
+                answers,
                 directory / TAILORED_PDF,
+                directory / COVER_LETTER_PDF if application.cover_letter_file else None,
                 directory / SCREENSHOT,
                 hand_over,
             )

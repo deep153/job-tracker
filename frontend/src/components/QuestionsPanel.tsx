@@ -23,6 +23,7 @@ function SourceBadge({ question }: { question: FormQuestion }) {
   if (question.needs_input) return <span className="badge badge-warning">Needs input</span>;
   if (question.source === "bank") return <span className="badge badge-green">From answer bank</span>;
   if (question.source === "resume") return <span className="badge badge-green">Tailored resume</span>;
+  if (question.source === "cover_letter") return <span className="badge badge-green">Cover letter</span>;
   if (question.source === "ai") return <span className="badge badge-ai">AI-drafted</span>;
   if (question.source === "you") return <span className="badge">Your answer</span>;
   return <span className="badge badge-muted">Optional</span>;
@@ -38,6 +39,13 @@ function AnswerInput({
   onChange: (value: string) => void;
 }) {
   const id = `question-${question.key}`;
+  if (question.source === "cover_letter") {
+    return (
+      <p id={id} className="question-file">
+        Your cover letter (edit it below) is {question.kind === "file" ? "uploaded as a PDF" : "pasted"} here.
+      </p>
+    );
+  }
   if (question.kind === "file") {
     return (
       <p id={id} className="question-file">

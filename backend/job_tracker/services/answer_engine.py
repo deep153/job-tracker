@@ -9,6 +9,8 @@ from rapidfuzz import fuzz
 from job_tracker.models.answers import BankEntry, FormAnswer, FormField
 
 RESUME_ANSWER = "Tailored resume (PDF)"
+COVER_LETTER_FILE_ANSWER = "Tailored cover letter (PDF)"
+COVER_LETTER_TEXT_ANSWER = "Tailored cover letter"
 
 # A question matches a bank entry when one's words are (nearly) all among the other's, and the two are still
 # alike overall, so "Email" doesn't answer "Do you consent to email updates?" nor "Name" answer "First Name".
@@ -36,6 +38,13 @@ _EEO = re.compile(
 )
 # A free-text question this long, or ending in "?", asks for more than a fact like a name or a link.
 _OPEN_ENDED_WORDS = 6
+
+
+def is_cover_letter(field: FormField) -> bool:
+    return (
+        field.kind in ("file", "text", "textarea")
+        and re.search(r"\bcover\s*-?\s*letter\b", field.label, re.I) is not None
+    )
 
 
 def is_eeo(field: FormField) -> bool:
@@ -120,6 +129,10 @@ def draft_answers(fields: list[FormField], bank: list[BankEntry]) -> DraftedAnsw
     answers = []
     used = set()
     for field in fields:
+        if is_cover_letter(field):
+            text = COVER_LETTER_FILE_ANSWER if field.kind == "file" else COVER_LETTER_TEXT_ANSWER
+            answers.append(FormAnswer(field, text, "cover_letter"))
+            continue
         if field.kind == "file":
             is_resume = "resume" in _words(field.label).split()
             answers.append(FormAnswer(field, RESUME_ANSWER, "resume") if is_resume else FormAnswer(field, None, "none"))

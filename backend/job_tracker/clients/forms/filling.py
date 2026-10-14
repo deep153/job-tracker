@@ -86,13 +86,13 @@ def _errors(page: Page) -> list[str]:
     return [message for messages in _in_any_frame(page, _ERRORS) for message in messages]
 
 
-def _fill(frame: Frame, answer: FormAnswer, resume_pdf: Path) -> None:
+def _fill(frame: Frame, answer: FormAnswer, documents: dict[str, Path]) -> None:
     field = answer.field
     if field.kind == "file":
-        if answer.source == "resume":
+        if answer.source in documents:
             frame.locator(
                 f'input[type=file][id="{field.key}"], input[type=file][name="{field.key}"]'
-            ).first.set_input_files(resume_pdf)
+            ).first.set_input_files(documents[answer.source])
         return
     if answer.answer is None:
         return
@@ -185,7 +185,7 @@ def submit_form(
     url: str,
     layout: FormLayout,
     answers: list[FormAnswer],
-    resume_pdf: Path,
+    documents: dict[str, Path],
     screenshot: Path,
     on_handover: Callable[[str], None],
     visible: bool,
@@ -197,7 +197,7 @@ def submit_form(
             frame = open_form(page, url, layout)
             unknown = _unknown_required(frame, layout, answers)
             for answer in answers:
-                _fill(frame, answer, resume_pdf)
+                _fill(frame, answer, documents)
             if unknown:
                 labels = ", ".join(f"“{label}”" for label in unknown)
                 return _hand_over(

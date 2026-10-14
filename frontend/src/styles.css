@@ -1950,6 +1950,14 @@ select.text-input {
   font-size: 12px;
 }
 
+.cover-letter-input {
+  width: 100%;
+  min-height: 240px;
+  margin-bottom: 12px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
 .question-save {
   margin-top: 6px;
 }

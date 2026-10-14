@@ -123,7 +123,8 @@ CREATE TABLE IF NOT EXISTS applications (
     answers TEXT,
     form_error TEXT,
     submitted_at TEXT,
-    screenshot INTEGER NOT NULL DEFAULT 0
+    screenshot INTEGER NOT NULL DEFAULT 0,
+    cover_letter TEXT
 );
 
 CREATE INDEX IF NOT EXISTS applications_by_job ON applications (job_id);
@@ -200,6 +201,7 @@ _ADDED_COLUMNS = {
         "form_error": "TEXT",
         "submitted_at": "TEXT",
         "screenshot": "INTEGER NOT NULL DEFAULT 0",
+        "cover_letter": "TEXT",
     },
 }
 

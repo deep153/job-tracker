@@ -21,7 +21,9 @@ class PlatformForm:
         url: str,
         answers: list[FormAnswer],
         resume_pdf: Path,
+        cover_letter_pdf: Path | None,
         screenshot: Path,
         on_handover: Callable[[str], None],
     ) -> SubmitOutcome:
-        return submit_form(url, self._layout, answers, resume_pdf, screenshot, on_handover, self._visible)
+        documents = {"resume": resume_pdf} | ({"cover_letter": cover_letter_pdf} if cover_letter_pdf else {})
+        return submit_form(url, self._layout, answers, documents, screenshot, on_handover, self._visible)

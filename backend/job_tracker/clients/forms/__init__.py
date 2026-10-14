@@ -23,11 +23,12 @@ class FormSubmitter(Protocol):
         url: str,
         answers: list[FormAnswer],
         resume_pdf: Path,
+        cover_letter_pdf: Path | None,
         screenshot: Path,
         on_handover: Callable[[str], None],
     ) -> SubmitOutcome:
-        """Fill in the form with `answers`, upload `resume_pdf` as the resume, and send it; "submitted" once the
-        confirmation shows.
+        """Fill in the form with `answers`, upload `resume_pdf` as the resume (and `cover_letter_pdf` as the cover
+        letter), and send it; "submitted" once the confirmation shows.
 
         On a CAPTCHA, or a required question that wasn't there in review, calls `on_handover` with the reason and
         leaves the browser to me until I close it. Raises SubmitError on any other failure, after saving a
