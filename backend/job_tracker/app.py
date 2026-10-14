@@ -21,9 +21,15 @@ from job_tracker.routes import (
 from job_tracker.routes.errors import register_error_handlers
 
 
-def create_app(db_path: Path, http: httpx.Client, office: LibreOffice | None = None, llm: LLM | None = None) -> FastAPI:
+def create_app(
+    db_path: Path,
+    http: httpx.Client,
+    office: LibreOffice | None = None,
+    llm: LLM | None = None,
+    visible_browser: bool = True,
+) -> FastAPI:
     app = FastAPI(title="Job Tracker")
-    app.state.services = build_services(db_path, http, office, llm)
+    app.state.services = build_services(db_path, http, office, llm, visible_browser)
     register_error_handlers(app)
     for module in (status, resume, search_settings, settings, runs, companies, jobs, applications, answer_bank):
         app.include_router(module.router)

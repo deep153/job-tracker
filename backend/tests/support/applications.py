@@ -14,12 +14,17 @@ BOARD = "globex"
 
 
 def scored_job(
-    client: TestClient, boards: FakeJobBoards, bold_labels: bool = False, form: str = "greenhouse.html"
+    client: TestClient,
+    boards: FakeJobBoards,
+    bold_labels: bool = False,
+    form: str = "greenhouse.html",
+    variants: dict[str, bool] | None = None,
 ) -> int:
-    """A ready resume and one scored job to apply to, whose application form is the local fake page `form`;
-    returns the job's id."""
+    """A ready resume and one scored job to apply to, whose application form is the local fake page `form` (with
+    `variants`, see `fake_forms`); returns the job's id."""
     add_ready_resume(client, bold_labels=bold_labels)
-    job = greenhouse_job(BOARD, "Backend Engineer", "New York, NY", "<p>Payments in Go.</p>", url=form_url(form))
+    url = form_url(form, **(variants or {}))
+    job = greenhouse_job(BOARD, "Backend Engineer", "New York, NY", "<p>Payments in Go.</p>", url=url)
     boards.serve_jobs(BOARD, [job])
     discover_boards(client, boards, [BOARD], {**READY_SETTINGS, "roles": ["Engineer"]})
     run_to_completion(client)

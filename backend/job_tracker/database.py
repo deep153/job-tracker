@@ -121,7 +121,9 @@ CREATE TABLE IF NOT EXISTS applications (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     answers TEXT,
-    form_error TEXT
+    form_error TEXT,
+    submitted_at TEXT,
+    screenshot INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS applications_by_job ON applications (job_id);
@@ -193,7 +195,12 @@ _ADDED_COLUMNS = {
         "matched_jobs": "INTEGER NOT NULL DEFAULT 0",
         "ai_cost_usd": "REAL NOT NULL DEFAULT 0",
     },
-    "applications": {"answers": "TEXT", "form_error": "TEXT"},
+    "applications": {
+        "answers": "TEXT",
+        "form_error": "TEXT",
+        "submitted_at": "TEXT",
+        "screenshot": "INTEGER NOT NULL DEFAULT 0",
+    },
 }
 
 

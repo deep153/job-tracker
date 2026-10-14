@@ -4,10 +4,14 @@ from typing import Literal
 from job_tracker.models.answers import FormAnswer
 from job_tracker.models.resume import SkillLine
 
-ApplicationStatus = Literal["drafting", "in_review", "failed"]
+ApplicationStatus = Literal["drafting", "in_review", "submitting", "submitted", "needs_manual", "failed"]
 
 # An application in one of these is still being worked on; applying to its job again returns it.
 OPEN_STATUSES: tuple[ApplicationStatus, ...] = ("drafting", "in_review")
+
+# An application in one of these has been (or is being) sent, so its job can't be applied to again. A job has at
+# most one.
+SENT_STATUSES: tuple[ApplicationStatus, ...] = ("submitting", "submitted", "needs_manual")
 
 
 @dataclass(frozen=True)
@@ -47,6 +51,18 @@ class Application:
     resume: TailoredResume | None
     answers: list[FormAnswer] | None = None  # None until the form is read, or when it can't be
     form_error: str | None = None  # why the form couldn't be read, so the application can't be submitted
+    submitted_at: str | None = None
+    screenshot: bool = False  # of the form when submitting it failed
+
+    @property
+    def editable(self) -> bool:
+        """In review, or back with me after sending it failed."""
+        return self.status == "in_review" or self.submit_failed
+
+    @property
+    def submit_failed(self) -> bool:
+        """Failed while submitting, after review (a tailoring failure has no resume); approving retries it."""
+        return self.status == "failed" and self.resume is not None and self.answers is not None
 
     @property
     def unanswered(self) -> list[FormAnswer]:
@@ -56,7 +72,9 @@ class Application:
     @property
     def approval_problem(self) -> str | None:
         """Why the application can't be approved yet, or None when it can."""
-        if self.status != "in_review" or self.resume is None:
+        if self.status in SENT_STATUSES:
+            return "This application has already been sent."
+        if not self.editable or self.resume is None:
             return "Only an application in review can be approved."
         if self.form_error is not None:
             return self.form_error

@@ -13,11 +13,11 @@ from pathlib import Path
 from pypdf import PdfReader
 
 from job_tracker.clients.claude import LLMError
-from job_tracker.clients.forms import FormError, FormSubmitter
+from job_tracker.clients.forms import FormError, FormSubmitter, SubmitError
 from job_tracker.clients.libreoffice import MISSING_MESSAGE, ConversionError, LibreOffice
 from job_tracker.database import Database
 from job_tracker.models.answers import FormAnswer
-from job_tracker.models.application import Application, TailoredResume
+from job_tracker.models.application import SENT_STATUSES, Application, ApplicationStatus, TailoredResume
 from job_tracker.models.job import Job
 from job_tracker.models.platform import PLATFORM_NAMES, Platform
 from job_tracker.models.resume import ResumeVersion, SkillLine
@@ -35,7 +35,14 @@ log = logging.getLogger(__name__)
 
 TAILORED_DOCX = "resume.docx"
 TAILORED_PDF = "resume.pdf"
+SCREENSHOT = "screenshot.png"
 INTERRUPTED = "Tailoring was interrupted because the server stopped. Try again."
+SUBMIT_INTERRUPTED = (
+    "Sending was interrupted because the server stopped. Check the company's site or your email to see whether "
+    "it went through, and finish it by hand if not."
+)
+HANDOVER = "Finish the application in the browser window that opened, then close it."
+ALREADY_APPLIED = "You've already applied to this job."
 
 
 class TailoringError(Exception):
@@ -130,6 +137,7 @@ class ApplicationService:
         self._edit_lock = threading.Lock()
         with self._db.transaction() as uow:
             uow.applications.fail_drafting(INTERRUPTED, _now())
+            uow.applications.interrupt_submitting(SUBMIT_INTERRUPTED, _now())
 
     def apply(self, job_id: int) -> tuple[Application, bool]:
         """The job's open application if it has one (and False), or a new one being tailored (and True)."""
@@ -137,10 +145,13 @@ class ApplicationService:
             with self._db.transaction() as uow:
                 job = uow.jobs.get(job_id)
                 existing = uow.applications.open_for_job(job_id)
+                sent = uow.applications.sent_for_job(job_id)
             if job is None:
                 raise NotFoundError("Job not found.")
             if existing is not None:
                 return existing, False
+            if sent is not None:
+                raise ConflictError(ALREADY_APPLIED)
             missing = scoring_missing(self._settings, self._resumes)
             if missing:
                 raise SetupIncompleteError(missing)
@@ -161,8 +172,10 @@ class ApplicationService:
         return application
 
     def cancel(self, application_id: int) -> None:
-        """Discard the application and its files; nothing has been sent anywhere."""
+        """Discard the application and its files, as long as nothing has been sent anywhere."""
         application = self.get(application_id)
+        if application.status in SENT_STATUSES:
+            raise ConflictError("This application has already been sent, so it can't be cancelled.")
         with self._db.transaction() as uow:
             uow.applications.delete(application_id)
         if application.resume is not None:
@@ -210,7 +223,7 @@ class ApplicationService:
         """Save answers I typed in review; a blank answer clears the question."""
         with self._edit_lock:
             application = self.get(application_id)
-            if application.status != "in_review" or application.answers is None:
+            if not application.editable or application.answers is None:
                 raise ConflictError("Only the questions of an application in review can be answered.")
             by_key = {answer.field.key: answer for answer in application.answers}
             for key, text in answers.items():
@@ -223,12 +236,63 @@ class ApplicationService:
         return self.get(application_id)
 
     def approve(self, application_id: int) -> Application:
-        """Check the application is ready to submit; submitting it comes with the form filler."""
+        """Start sending the application by filling in the company's form; it's `submitting` until that ends in
+        `submitted`, `needs_manual` (handed over to me in the browser) or `failed`."""
+        with self._apply_lock:
+            application = self.get(application_id)
+            problem = application.approval_problem
+            if problem is not None:
+                raise ConflictError(problem)
+            with self._db.transaction() as uow:
+                job = uow.jobs.get(application.job_id)
+                if uow.applications.sent_for_job(application.job_id) is not None:
+                    raise ConflictError(ALREADY_APPLIED)
+                uow.applications.start_submitting(application_id, _now())
+        assert job is not None
+        threading.Thread(target=self._submit_in_background, args=(application, job), daemon=True).start()
+        return self.get(application_id)
+
+    def screenshot(self, application_id: int) -> Path:
         application = self.get(application_id)
-        problem = application.approval_problem
-        if problem is not None:
-            raise ConflictError(problem)
-        return application
+        if not application.screenshot or application.resume is None:
+            raise NotFoundError("This application has no screenshot.")
+        return self._dir / application.resume.directory / SCREENSHOT
+
+    def _submit_in_background(self, application: Application, job: Job) -> None:
+        assert application.resume is not None and application.answers is not None
+        directory = self._dir / application.resume.directory
+        (directory / SCREENSHOT).unlink(missing_ok=True)
+
+        def hand_over(reason: str) -> None:
+            with self._db.transaction() as uow:
+                uow.applications.finish_submitting(application.id, "needs_manual", _now(), f"{reason} {HANDOVER}")
+
+        try:
+            outcome = self._forms[job.posting.platform].submit(
+                job.posting.application_url,
+                application.answers,
+                directory / TAILORED_PDF,
+                directory / SCREENSHOT,
+                hand_over,
+            )
+        except SubmitError as error:
+            self._finish_submitting(application.id, "failed", error.message, error.screenshot)
+            return
+        except FormError as error:
+            self._finish_submitting(application.id, "failed", error.message)
+            return
+        except Exception as error:
+            log.exception("submitting application %s failed", application.id)
+            self._finish_submitting(application.id, "failed", f"Unexpected error while submitting: {error}")
+            return
+        if outcome == "submitted":
+            self._finish_submitting(application.id, "submitted")
+
+    def _finish_submitting(
+        self, application_id: int, status: ApplicationStatus, error: str | None = None, screenshot: bool = False
+    ) -> None:
+        with self._db.transaction() as uow:
+            uow.applications.finish_submitting(application_id, status, _now(), error, screenshot)
 
     def _fail(self, application_id: int, directory: str, message: str) -> None:
         shutil.rmtree(self._dir / directory, ignore_errors=True)
@@ -241,7 +305,7 @@ class ApplicationService:
         with self._edit_lock:
             application = self.get(application_id)
             resume = application.resume
-            if application.status != "in_review" or resume is None:
+            if not application.editable or resume is None:
                 raise ConflictError("Only an application in review can be edited.")
             version = self._resumes.get(resume.master_version)
             summary = [" ".join(text.split()) for text in summary if text.strip()]

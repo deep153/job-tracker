@@ -42,7 +42,8 @@ def answer_questions(application_id: int, body: FormAnswersIn, services: Service
 
 @router.post("/applications/{application_id}/approve")
 def approve_application(application_id: int, services: ServicesDep) -> dict[str, Any]:
-    """Refused (409) while anything still needs fixing, such as a required question with no answer."""
+    """Starts sending the application (it's `submitting` until that ends). Refused (409) while anything still
+    needs fixing, such as a required question with no answer, or once it's been sent."""
     application = services.applications.approve(application_id)
     return application_json(application, services.jobs.get(application.job_id))
 
@@ -56,6 +57,12 @@ def cancel_application(application_id: int, services: ServicesDep) -> Response:
 @router.get("/applications/{application_id}/resume.pdf")
 def get_tailored_pdf(application_id: int, services: ServicesDep) -> FileResponse:
     return FileResponse(services.applications.file(application_id, TAILORED_PDF), media_type="application/pdf")
+
+
+@router.get("/applications/{application_id}/screenshot.png")
+def get_screenshot(application_id: int, services: ServicesDep) -> FileResponse:
+    """The page as it was when sending the application failed."""
+    return FileResponse(services.applications.screenshot(application_id), media_type="image/png")
 
 
 @router.get("/applications/{application_id}/resume.docx")
