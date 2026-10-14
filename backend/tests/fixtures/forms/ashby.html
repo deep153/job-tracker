@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Backend Engineer @ Globex</title>
+    <style>
+      ._required_f7cvd_91::after { content: "*"; color: red; }
+      .ashby-application-form-input-yesno input[type="checkbox"] { display: none; }
+      .ashby-application-form-input-yesno button[aria-pressed="true"] { background: #333; color: white; }
+      input[type="file"] { position: absolute; width: 1px; height: 1px; clip-path: inset(50%); }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <div class="ashby-job-posting-right-pane">
+        <div id="form" role="tabpanel" aria-label="Application"></div>
+      </div>
+    </div>
+    <template id="application">
+      <div class="_autofillPane_5yu8i_448 ashby-application-form-autofill-uploader">
+        <input type="file" tabindex="-1" />
+        <h3>Autofill from resume</h3>
+        <button class="ashby-application-form-autofill-input-cta">Upload file</button>
+      </div>
+      <div class="_jobPostingForm_5yu8i_402 ashby-application-form-container">
+        <div class="_section_5yu8i_86 ashby-application-form-section-container">
+          <div class="_fieldEntry_1e3gg_28 ashby-application-form-field-entry" data-field-path="_systemfield_name">
+            <label class="_heading_f7cvd_52 _required_f7cvd_91 _label_1e3gg_42 ashby-application-form-question-title" for="_systemfield_name">Name</label>
+            <div><input placeholder="Type here..." name="_systemfield_name" required="" id="_systemfield_name" type="text" class="ashby-application-form-input-text" value="" /></div>
+          </div>
+          <div class="_fieldEntry_1e3gg_28 ashby-application-form-field-entry" data-field-path="_systemfield_email">
+            <label class="_heading_f7cvd_52 _required_f7cvd_91 _label_1e3gg_42 ashby-application-form-question-title" for="_systemfield_email">Email</label>
+            <div><input placeholder="hello@example.com..." name="_systemfield_email" required="" id="_systemfield_email" type="email" class="ashby-application-form-input-text" value="" /></div>
+          </div>
+          <div class="_fieldEntry_1e3gg_28 ashby-application-form-field-entry" data-field-path="_systemfield_resume">
+            <label class="_heading_f7cvd_52 _required_f7cvd_91 _label_1e3gg_42 ashby-application-form-question-title" for="_systemfield_resume">Resume</label>
+            <div role="presentation" class="ashby-application-form-input-file">
+              <input type="file" tabindex="-1" id="_systemfield_resume" required="" />
+              <button class="ashby-application-form-input-file-dropzone-upload"><span>Upload File</span></button>
+            </div>
+          </div>
+          <div class="_fieldEntry_1e3gg_28 ashby-application-form-field-entry" data-field-path="5b1e2f0a-0000-4000-8000-000000000001">
+            <label class="_heading_f7cvd_52  _label_1e3gg_42 ashby-application-form-question-title" for="5b1e2f0a-0000-4000-8000-000000000001">LinkedIn Profile</label>
+            <input placeholder="Type here..." name="5b1e2f0a-0000-4000-8000-000000000001" id="5b1e2f0a-0000-4000-8000-000000000001" type="text" class="ashby-application-form-input-text" value="" />
+          </div>
+          <div class="_fieldEntry_1e3gg_28 ashby-application-form-field-entry" data-field-path="5b1e2f0a-0000-4000-8000-000000000002">
+            <label class="_heading_f7cvd_52 _required_f7cvd_91 _label_1e3gg_42 ashby-application-form-question-title" for="5b1e2f0a-0000-4000-8000-000000000002">Are you authorized to work in the US?</label>
+            <div class="_container_1svni_28 _yesno_1e3gg_148  ashby-application-form-input-yesno">
+              <button class="ashby-application-form-input-yesno-option" aria-pressed="false" data-option="yes">Yes</button>
+              <button class="ashby-application-form-input-yesno-option" aria-pressed="false" data-option="no">No</button>
+              <input type="checkbox" class="_input_1svni_78" tabindex="-1" name="5b1e2f0a-0000-4000-8000-000000000002" />
+            </div>
+          </div>
+          <div class="_fieldEntry_1e3gg_28 ashby-application-form-field-entry" data-field-path="5b1e2f0a-0000-4000-8000-000000000003">
+            <label class="_heading_f7cvd_52 _required_f7cvd_91 _label_1e3gg_42 ashby-application-form-question-title" for="5b1e2f0a-0000-4000-8000-000000000003">Why do you want to work at Globex?</label>
+            <textarea placeholder="Type here..." name="5b1e2f0a-0000-4000-8000-000000000003" id="5b1e2f0a-0000-4000-8000-000000000003" class="ashby-application-form-input-textarea" rows="4"></textarea>
+          </div>
+        </div>
+        <div class="_section_5yu8i_86 ashby-application-form-section-container">
+          <div data-field-path="5b1e2f0a-0000-4000-8000-000000000004">
+            <fieldset class="_container_1258i_28 _fieldEntry_1e3gg_28 ashby-application-form-input-checkbox-group">
+              <label class="_heading_f7cvd_52 _required_f7cvd_91 _label_1e3gg_42 ashby-application-form-question-title" for="5b1e2f0a-0000-4000-8000-000000000004">Privacy Notice Acknowledgement</label>
+              <div class="ashby-application-form-input-checkbox-group-option">
+                <span class="ashby-application-form-input-checkbox-group-option-checkbox"><input type="checkbox" id="5b1e2f0a-0000-4000-8000-000000000004-labeled-checkbox-0" name="I have read the privacy notice." /></span>
+                <label for="5b1e2f0a-0000-4000-8000-000000000004-labeled-checkbox-0" class="ashby-application-form-input-checkbox-group-option-label">I have read the privacy notice.</label>
+              </div>
+            </fieldset>
+          </div>
+        </div>
+      </div>
+      <div class="ashby-survey-form-container">
+        <div class="_jobPostingForm_5yu8i_402 ashby-application-form-container">
+          <div class="_section_5yu8i_86 ashby-application-form-section-container">
+            <div data-field-path="_systemfield_eeoc_gender">
+              <fieldset class="_container_1258i_28 _fieldEntry_1e3gg_28 ashby-application-form-input-radio-group">
+                <label class="_heading_f7cvd_52  _label_1e3gg_42 ashby-application-form-question-title" for="_systemfield_eeoc_gender">Gender</label>
+                <div class="ashby-application-form-input-radio-group-option">
+                  <input type="radio" id="eeoc_gender-labeled-radio-0" name="eeoc_gender" />
+                  <label for="eeoc_gender-labeled-radio-0">Male</label>
+                </div>
+                <div class="ashby-application-form-input-radio-group-option">
+                  <input type="radio" id="eeoc_gender-labeled-radio-1" name="eeoc_gender" />
+                  <label for="eeoc_gender-labeled-radio-1">Female</label>
+                </div>
+                <div class="ashby-application-form-input-radio-group-option">
+                  <input type="radio" id="eeoc_gender-labeled-radio-2" name="eeoc_gender" />
+                  <label for="eeoc_gender-labeled-radio-2">Decline to self-identify</label>
+                </div>
+              </fieldset>
+            </div>
+            <!-- form end -->
+          </div>
+        </div>
+      </div>
+      <button class="_button_zyh3g_28 _primary_zyh3g_97 _submitButton_5yu8i_411 ashby-application-form-submit-button"><span>Submit Application</span></button>
+    </template>
+    <script>
+      // Like Ashby's single-page app: the form renders a moment after the page loads, Yes/No questions are toggle
+      // buttons, and submitting sends the answers with fetch and shows the result in place.
+      setTimeout(() => {
+        const form = document.getElementById("form");
+        form.appendChild(document.getElementById("application").content.cloneNode(true));
+        for (const button of form.querySelectorAll(".ashby-application-form-input-yesno-option")) {
+          button.addEventListener("click", () => {
+            const group = button.parentElement;
+            for (const other of group.querySelectorAll("button")) other.setAttribute("aria-pressed", String(other === button));
+            group.querySelector("input[type=checkbox]").checked = button.dataset.option === "yes";
+          });
+        }
+        form.querySelector(".ashby-application-form-submit-button").addEventListener("click", async () => {
+          const sent = new FormData();
+          for (const input of form.querySelectorAll(".ashby-application-form-container input, .ashby-application-form-container textarea")) {
+            const key = input.name || input.id;
+            const yesno = input.closest(".ashby-application-form-input-yesno");
+            if (yesno) {
+              const pressed = yesno.querySelector("button[aria-pressed=true]");
+              if (pressed) sent.append(key, pressed.textContent);
+            } else if (input.type === "file") {
+              if (input.files.length) sent.append(key, input.files[0]);
+            } else if (input.type === "radio") {
+              if (input.checked) sent.append(key, input.labels[0].textContent);
+            } else if (input.type === "checkbox") {
+              if (input.checked) sent.append(key, "on");
+            } else {
+              sent.append(key, input.value);
+            }
+          }
+          const response = await fetch(location.pathname + location.search, { method: "POST", body: sent });
+          const page = new DOMParser().parseFromString(await response.text(), "text/html");
+          document.getElementById("root").innerHTML = page.body.innerHTML;
+        });
+      }, 300);
+    </script>
+  </body>
+</html>

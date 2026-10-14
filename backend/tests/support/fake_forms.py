@@ -3,6 +3,8 @@ Playwright at them instead of at real company forms.
 
 Posting a form records what was sent and redirects to `confirmation.html`. Query parameters on a page's URL pick
 a variant: `captcha` adds a CAPTCHA placeholder to the form, and `fail` makes posting it show an error instead.
+Additions go at the end of the form: before `<!-- form end -->` on pages that have it (forms without a <form>
+element), else before `</form>`.
 """
 
 import email
@@ -17,6 +19,7 @@ from typing import Any
 
 _PAGES = Path(__file__).parent.parent / "fixtures" / "forms"
 _CAPTCHA = '<div class="g-recaptcha" data-sitekey="fake-site-key" style="width:304px;height:78px"></div>'
+_FORM_END = "<!-- form end -->"
 _FAILED = """<!doctype html><html><body>
 <div role="alert" class="error-message">Something went wrong submitting your application. Please try again.</div>
 </body></html>"""
@@ -109,7 +112,8 @@ class _Handler(BaseHTTPRequestHandler):
             added = "".join(_added)
         if "captcha" in variants:
             added += _CAPTCHA
-        html = html.replace("</form>", f"{added}</form>", 1)
+        end = _FORM_END if _FORM_END in html else "</form>"
+        html = html.replace(end, f"{added}{end}", 1)
         self._send(200, html.encode())
 
     def do_POST(self) -> None:

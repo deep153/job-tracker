@@ -2,8 +2,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
 
+from job_tracker.clients.forms import ashby, greenhouse, lever
+from job_tracker.clients.forms.adapter import PlatformForm
 from job_tracker.clients.forms.filling import SubmitError, SubmitOutcome
-from job_tracker.clients.forms.greenhouse import GreenhouseForm
 from job_tracker.clients.forms.reading import FormError
 from job_tracker.models.answers import FormAnswer, FormField
 from job_tracker.models.platform import Platform
@@ -37,4 +38,8 @@ class FormSubmitter(Protocol):
 
 def form_submitters(visible: bool) -> dict[Platform, FormSubmitter]:
     """The platforms whose application forms can be read and sent; `visible` shows the browser while sending."""
-    return {"greenhouse": GreenhouseForm(visible)}
+    return {
+        "greenhouse": PlatformForm(greenhouse.LAYOUT, visible),
+        "lever": PlatformForm(lever.LAYOUT, visible),
+        "ashby": PlatformForm(ashby.LAYOUT, visible),
+    }

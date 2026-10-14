@@ -20,6 +20,8 @@ _SAME_MEANING = [
     (re.compile(r"\be-mail\b"), " email "),
     (re.compile(r"\bcv\b"), " resume "),
 ]
+# Words that make a question about a different thing, so "Name" isn't answered with my "Last Name".
+_QUALIFIERS = {"first", "last", "middle", "preferred"}
 _FILLER = set(
     "a an and are as at be by can do does for from have if in is it of on or our please the this to we what "
     "when which will with would you your".split()
@@ -83,7 +85,7 @@ def _best_entry(field: FormField, bank: list[BankEntry]) -> BankEntry | None:
     best: tuple[float, BankEntry] | None = None
     for entry in bank:
         saved = _question(entry.question)
-        if not saved:
+        if not saved or _QUALIFIERS & set(question.split()) != _QUALIFIERS & set(saved.split()):
             continue
         shared = fuzz.token_set_ratio(question, saved)
         alike = fuzz.token_sort_ratio(question, saved)
