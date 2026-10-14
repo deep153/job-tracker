@@ -61,6 +61,36 @@ def test_approving_submits_the_reviewed_answers_and_the_tailored_pdf(client: Tes
     assert (filename.endswith(".pdf"), content) == (True, pdf)
 
 
+def test_a_form_with_a_captcha_is_handed_over_to_me(client: TestClient, boards: FakeJobBoards) -> None:
+    application = reviewed(client, boards, captcha=True)
+
+    handed_over = submit(client, application["id"])
+
+    assert handed_over["status"] == "needs_manual"
+    assert handed_over["error"] == (
+        "The form has a CAPTCHA to solve. Finish the application in the browser window that opened, then close it."
+    )
+    assert fake_forms.submissions() == []
+
+
+def test_a_required_question_added_after_review_is_handed_over_to_me(client: TestClient, boards: FakeJobBoards) -> None:
+    application = reviewed(client, boards)
+    fake_forms.add_to_forms(
+        '<label for="question_5001">Are you willing to relocate?*</label>'
+        '<input id="question_5001" name="question_5001" type="text" aria-required="true" />'
+    )
+
+    handed_over = submit(client, application["id"])
+
+    assert handed_over["status"] == "needs_manual"
+    assert handed_over["error"].startswith(
+        "The form asks required questions that weren't there in review: “Are you willing to relocate?”."
+    )
+    assert fake_forms.submissions() == []
+    again = client.post(f"/api/applications/{application['id']}/approve")
+    assert (again.status_code, again.json()["detail"]) == (409, "This application has already been sent.")
+
+
 def test_a_job_can_only_be_submitted_to_once(client: TestClient, boards: FakeJobBoards) -> None:
     application = reviewed(client, boards)
     submit(client, application["id"])
