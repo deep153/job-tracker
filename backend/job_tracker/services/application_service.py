@@ -17,7 +17,13 @@ from job_tracker.clients.forms import FormError, FormSubmitter, SubmitError
 from job_tracker.clients.libreoffice import MISSING_MESSAGE, ConversionError, LibreOffice
 from job_tracker.database import Database
 from job_tracker.models.answers import AnswerCategory, FormAnswer
-from job_tracker.models.application import SENT_STATUSES, Application, ApplicationStatus, TailoredResume
+from job_tracker.models.application import (
+    APPLIED_STATUSES,
+    SENT_STATUSES,
+    Application,
+    ApplicationStatus,
+    TailoredResume,
+)
 from job_tracker.models.job import Job
 from job_tracker.models.platform import PLATFORM_NAMES, Platform
 from job_tracker.models.resume import ResumeVersion, SkillLine
@@ -183,6 +189,24 @@ class ApplicationService:
         if application is None:
             raise NotFoundError("Application not found.")
         return application
+
+    def list_all(self) -> list[tuple[Application, Job]]:
+        """Every application with its job, newest first."""
+        with self._db.transaction() as uow:
+            applications = uow.applications.list_all()
+            jobs = {job_id: uow.jobs.get(job_id) for job_id in {a.job_id for a in applications}}
+        return [(application, job) for application in applications if (job := jobs[application.job_id]) is not None]
+
+    def track(self, application_id: int, status: ApplicationStatus) -> Application:
+        """Set the status by hand as I hear back. Only a submitted application has one to set, except that one
+        handed over to me can be marked submitted once I've finished it."""
+        application = self.get(application_id)
+        finished_by_hand = application.status == "needs_manual" and status == "submitted"
+        if application.status not in APPLIED_STATUSES and not finished_by_hand:
+            raise ConflictError("You can update the status once the application has been submitted.")
+        with self._db.transaction() as uow:
+            uow.applications.track(application_id, status, _now())
+        return self.get(application_id)
 
     def cancel(self, application_id: int) -> None:
         """Discard the application and its files, as long as nothing has been sent anywhere."""

@@ -2236,3 +2236,48 @@ mark.diff-removed,
     padding: 16px;
   }
 }
+
+.applications-sort {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.applications-sort .text-input {
+  width: auto;
+}
+
+.applications-table td {
+  vertical-align: middle;
+}
+
+.applications-table th:first-child,
+.applications-table td:first-child {
+  padding-left: 20px;
+}
+
+.applications-table th:last-child,
+.applications-table td:last-child {
+  text-align: left;
+}
+
+.sent-answers {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+}
+
+.sent-answer dd {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+}
+
+.sent-answer-empty {
+  color: var(--text-muted);
+}
+
+.sent-letter {
+  white-space: pre-wrap;
+  line-height: 1.6;
+}

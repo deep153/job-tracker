@@ -55,6 +55,16 @@ def application_json(application: Application, job: Job) -> dict[str, Any]:
     }
 
 
+def application_summary_json(application: Application, job: Job) -> dict[str, Any]:
+    """A row in the applications list; `date` is when it was submitted, or started if it hasn't been."""
+    return {
+        "id": application.id,
+        "status": application.status,
+        "date": application.submitted_at or application.created_at,
+        "job": job_json(job),
+    }
+
+
 def _cover_letter_json(application: Application) -> dict[str, Any] | None:
     if application.cover_letter is None:
         return None

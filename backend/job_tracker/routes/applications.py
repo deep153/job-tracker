@@ -5,10 +5,10 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from job_tracker.routes.dependencies import ServicesDep
 from job_tracker.routes.resume import DOCX_TYPE
-from job_tracker.serializers.applications import application_json
+from job_tracker.serializers.applications import application_json, application_summary_json
 from job_tracker.services.application_service import TAILORED_DOCX, TAILORED_PDF
 from job_tracker.validators.answers import FormAnswersIn, SaveToBankIn
-from job_tracker.validators.applications import CoverLetterIn, TailoredResumeIn
+from job_tracker.validators.applications import CoverLetterIn, StatusIn, TailoredResumeIn
 
 router = APIRouter(prefix="/api", tags=["applications"])
 
@@ -19,6 +19,19 @@ def apply_to_job(job_id: int, services: ServicesDep) -> JSONResponse:
     application, created = services.applications.apply(job_id)
     body = application_json(application, services.jobs.get(job_id))
     return JSONResponse(body, status_code=202 if created else 200)
+
+
+@router.get("/applications")
+def list_applications(services: ServicesDep) -> list[dict[str, Any]]:
+    """Every application, newest first."""
+    return [application_summary_json(application, job) for application, job in services.applications.list_all()]
+
+
+@router.put("/applications/{application_id}/status")
+def track_application(application_id: int, body: StatusIn, services: ServicesDep) -> dict[str, Any]:
+    """Sets the status by hand after submitting (409 before). `submitted` marks one I finished in the browser."""
+    application = services.applications.track(application_id, body.status)
+    return application_json(application, services.jobs.get(application.job_id))
 
 
 @router.get("/applications/{application_id}")

@@ -8,13 +8,21 @@ import {
   editTailoredResume,
   getApplication,
   saveAnswerToBank,
+  setApplicationStatus,
 } from "../api/applications";
 import { AlertIcon, CheckIcon, DownloadIcon, ExternalIcon } from "../components/icons";
 import { CoverLetterPanel } from "../components/CoverLetterPanel";
-import { answerDraft, changedAnswers, QuestionsPanel } from "../components/QuestionsPanel";
+import { answerDraft, changedAnswers, QuestionsPanel, SentAnswersPanel } from "../components/QuestionsPanel";
 import { ScoreBadge } from "../components/Score";
 import { Topbar } from "../components/Topbar";
-import type { Application, SkillLine, TailoredResume } from "../types/application";
+import {
+  APPLICATION_LABELS,
+  APPLIED_STATUSES,
+  type Application,
+  type SkillLine,
+  type TailoredResume,
+  type TrackedStatus,
+} from "../types/application";
 import { companyName, formatCost, fullDate, timeAgo } from "../utils/format";
 
 const POLL_MS = 1500;
@@ -27,6 +35,7 @@ export function ReviewPage({ id }: { id: number }) {
   const [application, setApplication] = useState<Application | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const working = application?.status === "drafting" || application?.status === "submitting";
+  const sent = application !== null && APPLIED_STATUSES.includes(application.status);
   const submitFailed = application?.status === "failed" && application.resume !== null && application.questions !== null;
 
   useEffect(() => {
@@ -50,13 +59,13 @@ export function ReviewPage({ id }: { id: number }) {
 
   return (
     <div className="app">
-      <Topbar page="jobs" />
+      <Topbar page={sent ? "applications" : "jobs"} />
       <main className="page">
-        <a className="back-link" href="#/">
-          ← Jobs
+        <a className="back-link" href={sent ? "#/applications" : "#/"}>
+          {sent ? "← Applications" : "← Jobs"}
         </a>
         <div className="page-heading">
-          <h1>Review application</h1>
+          <h1>{sent ? "Application" : "Review application"}</h1>
           {application && (
             <p className="subtitle review-job">
               <ScoreBadge score={application.job.score} />
@@ -79,8 +88,10 @@ export function ReviewPage({ id }: { id: number }) {
         {!application && !loadError && <div className="skeleton resume-skeleton" aria-busy="true" aria-label="Loading" />}
         {application?.status === "drafting" && <Drafting application={application} />}
         {application?.status === "submitting" && <Submitting />}
-        {application?.status === "submitted" && <Submitted application={application} />}
-        {application?.status === "needs_manual" && <NeedsManual application={application} />}
+        {application && APPLIED_STATUSES.includes(application.status) && (
+          <Sent application={application} onSaved={setApplication} />
+        )}
+        {application?.status === "needs_manual" && <NeedsManual application={application} onSaved={setApplication} />}
         {application?.status === "failed" && !submitFailed && <Failed application={application} />}
         {(application?.status === "in_review" || submitFailed) && application?.resume && (
           <InReview application={application} resume={application.resume} onSaved={setApplication} />
@@ -122,40 +133,115 @@ function Submitting() {
   );
 }
 
-function Submitted({ application }: { application: Application }) {
+const STATUS_CHOICES: (TrackedStatus | "submitted")[] = ["submitted", "interviewing", "offer", "rejected", "withdrawn"];
+
+function Sent({ application, onSaved }: { application: Application; onSaved: (a: Application) => void }) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function track(status: TrackedStatus | "submitted") {
+    setSaving(true);
+    setError(null);
+    try {
+      onSaved(await setApplicationStatus(application.id, status));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
-    <section className="panel review-status" aria-live="polite">
-      <CheckIcon />
-      <div>
-        <h2 className="panel-title">Application sent</h2>
-        <p className="panel-empty">
-          The form was submitted and its confirmation page appeared
-          {application.submitted_at && (
-            <>
-              {" "}
-              <time dateTime={application.submitted_at} title={fullDate(application.submitted_at)}>
-                {timeAgo(application.submitted_at)}
-              </time>
-            </>
+    <>
+      <section className="panel review-status" aria-live="polite">
+        <CheckIcon />
+        <div>
+          <h2 className="panel-title">Application sent</h2>
+          <p className="panel-empty">
+            Submitted
+            {application.submitted_at && (
+              <>
+                {" "}
+                <time dateTime={application.submitted_at} title={fullDate(application.submitted_at)}>
+                  {timeAgo(application.submitted_at)}
+                </time>
+              </>
+            )}
+            . Update the status as you hear back.
+          </p>
+          <div className="review-actions">
+            <label className="job-filter">
+              <span className="job-filter-label">Status</span>
+              <select
+                className="text-input"
+                value={application.status}
+                onChange={(e) => void track(e.target.value as TrackedStatus | "submitted")}
+                disabled={saving}
+                aria-busy={saving}
+              >
+                {STATUS_CHOICES.map((status) => (
+                  <option key={status} value={status}>
+                    {APPLICATION_LABELS[status].badge}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <a className="button button-secondary" href={application.resume?.pdf_url} target="_blank" rel="noreferrer">
+              Resume you sent
+              <ExternalIcon />
+              <span className="visually-hidden">(opens in a new tab)</span>
+            </a>
+            {application.cover_letter?.pdf_url && (
+              <a
+                className="button button-ghost"
+                href={application.cover_letter.pdf_url}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Cover letter PDF
+                <ExternalIcon />
+                <span className="visually-hidden">(opens in a new tab)</span>
+              </a>
+            )}
+          </div>
+          {error && (
+            <div className="notice notice-error" role="alert">
+              <AlertIcon />
+              <span className="notice-text">{error}</span>
+            </div>
           )}
-          .
-        </p>
-        <div className="review-actions">
-          <a className="button button-secondary" href={application.resume?.pdf_url} target="_blank" rel="noreferrer">
-            Resume you sent
-            <ExternalIcon />
-            <span className="visually-hidden">(opens in a new tab)</span>
-          </a>
-          <a className="button button-ghost" href="#/">
-            Back to jobs
-          </a>
         </div>
-      </div>
-    </section>
+      </section>
+      {application.cover_letter && (
+        <section className="panel" aria-labelledby="sent-letter-heading">
+          <div className="panel-header">
+            <h2 className="panel-title" id="sent-letter-heading">
+              Cover letter you sent
+            </h2>
+          </div>
+          <div className="panel-body sent-letter">{application.cover_letter.text}</div>
+        </section>
+      )}
+      {application.questions && <SentAnswersPanel questions={application.questions} />}
+    </>
   );
 }
 
-function NeedsManual({ application }: { application: Application }) {
+function NeedsManual({ application, onSaved }: { application: Application; onSaved: (a: Application) => void }) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function markSubmitted() {
+    setSaving(true);
+    setError(null);
+    try {
+      onSaved(await setApplicationStatus(application.id, "submitted"));
+    } catch (e) {
+      setError((e as Error).message);
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="notice notice-warning notice-stacked" role="alert">
       <div className="notice-row">
@@ -178,7 +264,18 @@ function NeedsManual({ application }: { application: Application }) {
           <DownloadIcon />
           Tailored resume
         </a>
+        <button
+          type="button"
+          className="button button-primary"
+          onClick={() => void markSubmitted()}
+          disabled={saving}
+          aria-busy={saving}
+        >
+          {saving && <span className="spinner" aria-hidden="true" />}
+          I've submitted it
+        </button>
       </div>
+      {error && <p className="notice-text">{error}</p>}
     </div>
   );
 }
@@ -230,7 +327,10 @@ function Failed({ application }: { application: Application }) {
 type Draft = { summary: string; skills: string[] };
 
 function draftFrom(resume: TailoredResume): Draft {
-  return { summary: resume.summary.tailored.join("\n\n"), skills: resume.skills.tailored.map((l) => l.skills.join(", ")) };
+  return {
+    summary: resume.summary.tailored.join("\n\n"),
+    skills: resume.skills.tailored.map((l) => l.skills.join(", ")),
+  };
 }
 
 /** Split "Go, AWS (Lambda, S3); SQL" into skills, keeping commas inside brackets. */
@@ -252,7 +352,10 @@ function splitSkills(text: string): string[] {
 }
 
 function editsFrom(draft: Draft): { summary: string[]; skills: string[][] } {
-  return { summary: draft.summary.split(/\n\s*\n/), skills: draft.skills.map(splitSkills) };
+  return {
+    summary: draft.summary.split(/\n\s*\n/),
+    skills: draft.skills.map(splitSkills),
+  };
 }
 
 function InReview({
@@ -394,8 +497,8 @@ function InReview({
           <div className="notice-row">
             <AlertIcon />
             <span className="notice-text">
-              <strong>Sending failed.</strong> {application.error} Fix anything below and try again, or apply by hand
-              on the{" "}
+              <strong>Sending failed.</strong> {application.error} Fix anything below and try again, or apply by hand on
+              the{" "}
               <a href={application.job.application_url} target="_blank" rel="noreferrer">
                 company's form
               </a>
@@ -427,7 +530,8 @@ function InReview({
         <div className="notice notice-warning" role="alert">
           <AlertIcon />
           <span className="notice-text">
-            The tailored resume runs to {pages(resume.page_count)}, longer than your {resume.master_page_count}-page master. Shorten the Summary or drop some skills, then regenerate.
+            The tailored resume runs to {pages(resume.page_count)}, longer than your {resume.master_page_count}-page
+            master. Shorten the Summary or drop some skills, then regenerate.
           </span>
         </div>
       )}
@@ -496,7 +600,10 @@ function InReview({
                     className="text-input"
                     value={draft.skills[index]}
                     onChange={(e) =>
-                      setDraft({ ...draft, skills: draft.skills.map((s, i) => (i === index ? e.target.value : s)) })
+                      setDraft({
+                        ...draft,
+                        skills: draft.skills.map((s, i) => (i === index ? e.target.value : s)),
+                      })
                     }
                   />
                 </label>

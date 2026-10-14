@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
+import { ApplicationsPage } from "./pages/ApplicationsPage";
 import { Dashboard } from "./pages/Dashboard";
 import { ResumePage } from "./pages/ResumePage";
 import { ReviewPage } from "./pages/ReviewPage";
 import { SettingsPage } from "./pages/SettingsPage";
 
-type Route = { page: "jobs" | "resume" | "settings" } | { page: "review"; applicationId: number };
+type Route = { page: "jobs" | "applications" | "resume" | "settings" } | { page: "review"; applicationId: number };
 
 function routeFromHash(): Route {
   const hash = window.location.hash;
+  if (hash === "#/applications") return { page: "applications" };
   if (hash === "#/resume") return { page: "resume" };
   if (hash === "#/settings") return { page: "settings" };
   const review = /^#\/applications\/(\d+)$/.exec(hash);
@@ -28,6 +30,7 @@ export function App() {
   }, []);
 
   if (route.page === "review") return <ReviewPage key={route.applicationId} id={route.applicationId} />;
+  if (route.page === "applications") return <ApplicationsPage />;
   if (route.page === "resume") return <ResumePage />;
   if (route.page === "settings") return <SettingsPage />;
   return <Dashboard />;
