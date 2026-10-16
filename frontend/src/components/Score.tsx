@@ -54,7 +54,12 @@ export function ScoreDetails({ score }: { score: FitScore }) {
             <span className="visually-hidden">Missing keywords: {score.missing_keywords.join(", ")}.</span>
           )}
           {score.missing_keywords.map((keyword) => (
-            <span className="keyword keyword-missing" key={`x-${keyword}`} aria-hidden="true" title="Not on your resume">
+            <span
+              className="keyword keyword-missing"
+              key={`x-${keyword}`}
+              aria-hidden="true"
+              title="Not on your resume"
+            >
               {keyword}
             </span>
           ))}

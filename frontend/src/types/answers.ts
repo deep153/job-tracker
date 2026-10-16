@@ -1,12 +1,5 @@
 export type AnswerCategory =
-  | "personal"
-  | "work_authorization"
-  | "sponsorship"
-  | "salary"
-  | "start_date"
-  | "links"
-  | "eeo"
-  | "other";
+  "personal" | "work_authorization" | "sponsorship" | "salary" | "start_date" | "links" | "eeo" | "other";
 
 export const CATEGORY_LABELS: Record<AnswerCategory, string> = {
   personal: "Personal details",

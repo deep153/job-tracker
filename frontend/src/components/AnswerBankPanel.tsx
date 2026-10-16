@@ -35,8 +35,8 @@ export function AnswerBankPanel() {
       </div>
       <div className="panel-body">
         <p className="field-hint">
-          Your answers to the questions application forms ask again and again. They fill in each form, matched to
-          the form's questions however they're worded, and you check them before anything is sent.
+          Your answers to the questions application forms ask again and again. They fill in each form, matched to the
+          form's questions however they're worded, and you check them before anything is sent.
         </p>
         {loadError && (
           <div className="notice notice-error" role="alert">
@@ -72,12 +72,7 @@ export function AnswerBankPanel() {
                           />
                         </li>
                       ) : (
-                        <AnswerRow
-                          key={entry.id}
-                          entry={entry}
-                          onEdit={() => setEditing(entry.id)}
-                          onDeleted={load}
-                        />
+                        <AnswerRow key={entry.id} entry={entry} onEdit={() => setEditing(entry.id)} onDeleted={load} />
                       ),
                     )}
                 </ul>

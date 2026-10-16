@@ -84,7 +84,11 @@ function CompanyRow({ company, onToggle }: { company: Company; onToggle: () => v
         </span>
       </div>
       {company.last_error && !company.blocked && (
-        <span className="company-error" title={company.last_error} aria-label={`Last fetch failed: ${company.last_error}`}>
+        <span
+          className="company-error"
+          title={company.last_error}
+          aria-label={`Last fetch failed: ${company.last_error}`}
+        >
           <AlertIcon />
         </span>
       )}
