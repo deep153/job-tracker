@@ -3,7 +3,7 @@
 from typing import Any
 
 from playwright.sync_api import Error as PlaywrightError
-from playwright.sync_api import Frame, sync_playwright
+from playwright.sync_api import Frame, Locator, Page, sync_playwright
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from job_tracker.models.answers import FormField
@@ -83,7 +83,7 @@ _OPEN_OPTIONS = """
 _OPEN_TIMEOUT_MS = 3_000
 
 
-def _clean(text: str) -> str:
+def clean(text: str) -> str:
     return " ".join(text.replace("*", " ").split())
 
 
@@ -91,10 +91,10 @@ def _fields(raw: list[dict[str, Any]]) -> list[FormField]:
     return [
         FormField(
             key=field["key"],
-            label=_clean(field["label"]),
+            label=clean(field["label"]),
             kind=field["kind"],
             required=bool(field["required"]),
-            options=[_clean(option) for option in field["options"]],
+            options=[clean(option) for option in field["options"]],
         )
         for field in raw
     ]
@@ -105,41 +105,56 @@ def read_form(url: str, selector: str) -> list[FormField]:
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
         try:
-            page = browser.new_page()
-            response = page.goto(url, wait_until="load", timeout=PAGE_TIMEOUT_MS)
-            if response is not None and not response.ok:
-                raise FormError(f"Couldn't open the application form at {url} (HTTP {response.status}).")
-            for frame in page.frames:
-                raw = _read_frame(frame, selector)
-                if raw is not None:
-                    for field in raw:
-                        if field["combobox"]:
-                            field["options"] = _dropdown_options(frame, field["key"])
-                    return _fields(raw)
+            frame = open_form(browser.new_page(), url, selector)
+            raw = raw_fields(frame, selector)
+            for field in raw:
+                if field["combobox"]:
+                    field["options"] = _dropdown_options(frame, field["key"])
+            return _fields(raw)
         except PlaywrightError as error:
             raise FormError(f"Couldn't open the application form at {url}: {error.message}") from error
         finally:
             browser.close()
+
+
+def open_form(page: Page, url: str, selector: str) -> Frame:
+    """Open `url` and find the frame holding the form matching `selector`."""
+    response = page.goto(url, wait_until="load", timeout=PAGE_TIMEOUT_MS)
+    if response is not None and not response.ok:
+        raise FormError(f"Couldn't open the application form at {url} (HTTP {response.status}).")
+    for frame in page.frames:
+        try:
+            if frame.evaluate("(selector) => document.querySelector(selector) !== null", selector):
+                return frame
+        except PlaywrightError:
+            continue
     raise FormError(f"Couldn't find an application form at {url}. The job may have closed.")
+
+
+def raw_fields(frame: Frame, selector: str) -> list[dict[str, Any]]:
+    """The form's questions as the page script reads them (custom dropdowns without their options)."""
+    result: list[dict[str, Any]] = frame.evaluate(_READ_FIELDS, selector)
+    return result
+
+
+def open_dropdown(frame: Frame, box: Locator) -> list[str]:
+    """Open a custom dropdown and return its options, as shown; [] if it didn't open."""
+    box.click()
+    try:
+        opened = frame.wait_for_function(_OPEN_OPTIONS, arg=box.element_handle(), timeout=_OPEN_TIMEOUT_MS)
+    except PlaywrightTimeoutError:
+        return []
+    return [clean(option) for option in opened.json_value()]
+
+
+def field_locator(frame: Frame, key: str) -> Locator:
+    return frame.locator(f'[id="{key}"], [name="{key}"]').first
 
 
 def _dropdown_options(frame: Frame, key: str) -> list[str]:
     """A custom dropdown's options are only in the page while it's open, so open it, read them, and close it."""
-    box = frame.locator(f'[id="{key}"], [name="{key}"]').first
-    box.click()
+    box = field_locator(frame, key)
     try:
-        opened = frame.wait_for_function(_OPEN_OPTIONS, arg=box.element_handle(), timeout=_OPEN_TIMEOUT_MS)
-        options: list[str] = opened.json_value()
-    except PlaywrightTimeoutError:
-        options = []
+        return open_dropdown(frame, box)
     finally:
         box.press("Escape")
-    return options
-
-
-def _read_frame(frame: Frame, selector: str) -> list[dict[str, Any]] | None:
-    try:
-        result: list[dict[str, Any]] | None = frame.evaluate(_READ_FIELDS, selector)
-    except PlaywrightError:
-        return None
-    return result

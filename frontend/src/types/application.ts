@@ -1,6 +1,16 @@
 import type { Job } from "./job";
 
-export type ApplicationStatus = "drafting" | "in_review" | "failed";
+export type ApplicationStatus = "drafting" | "in_review" | "submitting" | "submitted" | "needs_manual" | "failed";
+
+/** How each status reads as a badge on a job, and as the button that opens the application. */
+export const APPLICATION_LABELS: Record<ApplicationStatus, { badge: string; action: string }> = {
+  drafting: { badge: "Tailoring resume…", action: "View tailoring progress" },
+  in_review: { badge: "Draft in review", action: "Review application" },
+  submitting: { badge: "Sending…", action: "View sending progress" },
+  submitted: { badge: "Applied", action: "View application" },
+  needs_manual: { badge: "Finish by hand", action: "Finish application" },
+  failed: { badge: "Failed", action: "See what went wrong" },
+};
 
 export type SkillLine = { label: string | null; skills: string[] };
 
@@ -49,6 +59,9 @@ export type Application = {
   /** The application form's questions; null until it's read, or when it can't be. */
   questions: FormQuestion[] | null;
   form_error: string | null;
+  submitted_at: string | null;
+  /** The page as it was when sending failed. */
+  screenshot_url: string | null;
   can_approve: boolean;
   approval_problem: string | null;
 };

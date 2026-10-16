@@ -12,7 +12,7 @@ import { answerDraft, changedAnswers, QuestionsPanel } from "../components/Quest
 import { ScoreBadge } from "../components/Score";
 import { Topbar } from "../components/Topbar";
 import type { Application, SkillLine, TailoredResume } from "../types/application";
-import { companyName, formatCost, timeAgo } from "../utils/format";
+import { companyName, formatCost, fullDate, timeAgo } from "../utils/format";
 
 const POLL_MS = 1500;
 
@@ -23,7 +23,8 @@ function pages(count: number): string {
 export function ReviewPage({ id }: { id: number }) {
   const [application, setApplication] = useState<Application | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const drafting = application?.status === "drafting";
+  const working = application?.status === "drafting" || application?.status === "submitting";
+  const submitFailed = application?.status === "failed" && application.resume !== null && application.questions !== null;
 
   useEffect(() => {
     let cancelled = false;
@@ -37,12 +38,12 @@ export function ReviewPage({ id }: { id: number }) {
   }, [id]);
 
   useEffect(() => {
-    if (!drafting) return;
+    if (!working) return;
     const timer = window.setInterval(() => {
       getApplication(id).then(setApplication, () => {});
     }, POLL_MS);
     return () => window.clearInterval(timer);
-  }, [id, drafting]);
+  }, [id, working]);
 
   return (
     <div className="app">
@@ -74,8 +75,11 @@ export function ReviewPage({ id }: { id: number }) {
         )}
         {!application && !loadError && <div className="skeleton resume-skeleton" aria-busy="true" aria-label="Loading" />}
         {application?.status === "drafting" && <Drafting application={application} />}
-        {application?.status === "failed" && <Failed application={application} />}
-        {application?.status === "in_review" && application.resume && (
+        {application?.status === "submitting" && <Submitting />}
+        {application?.status === "submitted" && <Submitted application={application} />}
+        {application?.status === "needs_manual" && <NeedsManual application={application} />}
+        {application?.status === "failed" && !submitFailed && <Failed application={application} />}
+        {(application?.status === "in_review" || submitFailed) && application?.resume && (
           <InReview application={application} resume={application.resume} onSaved={setApplication} />
         )}
       </main>
@@ -97,6 +101,82 @@ function Drafting({ application }: { application: Application }) {
       </div>
       <CancelButton application={application} />
     </section>
+  );
+}
+
+function Submitting() {
+  return (
+    <section className="panel review-status" aria-live="polite">
+      <span className="spinner spinner-dark" aria-hidden="true" />
+      <div>
+        <h2 className="panel-title">Sending your application…</h2>
+        <p className="panel-empty">
+          A browser window opened on the company's application form. Your reviewed answers are being filled in and
+          your tailored resume uploaded, then the form is submitted. You can watch, but please don't type in it.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function Submitted({ application }: { application: Application }) {
+  return (
+    <section className="panel review-status" aria-live="polite">
+      <CheckIcon />
+      <div>
+        <h2 className="panel-title">Application sent</h2>
+        <p className="panel-empty">
+          The form was submitted and its confirmation page appeared
+          {application.submitted_at && (
+            <>
+              {" "}
+              <time dateTime={application.submitted_at} title={fullDate(application.submitted_at)}>
+                {timeAgo(application.submitted_at)}
+              </time>
+            </>
+          )}
+          .
+        </p>
+        <div className="review-actions">
+          <a className="button button-secondary" href={application.resume?.pdf_url} target="_blank" rel="noreferrer">
+            Resume you sent
+            <ExternalIcon />
+            <span className="visually-hidden">(opens in a new tab)</span>
+          </a>
+          <a className="button button-ghost" href="#/">
+            Back to jobs
+          </a>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function NeedsManual({ application }: { application: Application }) {
+  return (
+    <div className="notice notice-warning notice-stacked" role="alert">
+      <div className="notice-row">
+        <AlertIcon />
+        <span className="notice-text">
+          <strong>Over to you.</strong> {application.error}
+        </span>
+      </div>
+      <p className="notice-text">
+        If the window is closed already, open the form, finish it by hand and submit it. Your tailored resume is ready
+        to upload.
+      </p>
+      <div className="review-actions">
+        <a className="button button-secondary" href={application.job.application_url} target="_blank" rel="noreferrer">
+          Open the application form
+          <ExternalIcon />
+          <span className="visually-hidden">(opens in a new tab)</span>
+        </a>
+        <a className="button button-ghost" href={application.resume?.pdf_url} download>
+          <DownloadIcon />
+          Tailored resume
+        </a>
+      </div>
+    </div>
   );
 }
 
@@ -187,7 +267,7 @@ function InReview({
   const [busy, setBusy] = useState<"regenerate" | "answers" | "save" | "approve" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [answersError, setAnswersError] = useState<string | null>(null);
-  const [approval, setApproval] = useState<{ ok: boolean; message: string } | null>(null);
+  const [approveError, setApproveError] = useState<string | null>(null);
   const dirty = JSON.stringify(editsFrom(draft)) !== JSON.stringify(editsFrom(draftFrom(resume)));
   const changed = changedAnswers(questions, answers);
   const answersDirty = Object.keys(changed).length > 0;
@@ -234,16 +314,11 @@ function InReview({
 
   async function approve() {
     setBusy("approve");
-    setApproval(null);
+    setApproveError(null);
     try {
       onSaved(await approveApplication(application.id));
-      setApproval({
-        ok: true,
-        message: "Everything is ready. Submitting the form for you is coming in the next update.",
-      });
     } catch (e) {
-      setApproval({ ok: false, message: (e as Error).message });
-    } finally {
+      setApproveError((e as Error).message);
       setBusy(null);
     }
   }
@@ -268,7 +343,7 @@ function InReview({
           aria-describedby={approveBlocker ? "approve-blocker" : undefined}
         >
           {busy === "approve" && <span className="spinner" aria-hidden="true" />}
-          Approve
+          {application.status === "failed" ? "Try submitting again" : "Approve and submit"}
         </button>
         {approveBlocker && (
           <span className="review-blocker" id="approve-blocker">
@@ -278,10 +353,30 @@ function InReview({
         <span className="review-saved">Saved {timeAgo(application.updated_at)}</span>
         <CostNote usd={application.cost_usd} />
       </div>
-      {approval && (
-        <div className={`notice ${approval.ok ? "notice-success" : "notice-error"}`} role="status">
-          {approval.ok ? <CheckIcon /> : <AlertIcon />}
-          <span className="notice-text">{approval.message}</span>
+      {application.status === "failed" && (
+        <div className="notice notice-error notice-stacked" role="alert">
+          <div className="notice-row">
+            <AlertIcon />
+            <span className="notice-text">
+              <strong>Sending failed.</strong> {application.error} Fix anything below and try again, or apply by hand
+              on the{" "}
+              <a href={application.job.application_url} target="_blank" rel="noreferrer">
+                company's form
+              </a>
+              .
+            </span>
+          </div>
+          {application.screenshot_url && (
+            <a href={application.screenshot_url} target="_blank" rel="noreferrer" className="review-screenshot">
+              <img src={application.screenshot_url} alt="The application form when sending failed" />
+            </a>
+          )}
+        </div>
+      )}
+      {approveError && (
+        <div className="notice notice-error" role="alert">
+          <AlertIcon />
+          <span className="notice-text">Couldn't start sending. {approveError}</span>
         </div>
       )}
       {application.form_error && (

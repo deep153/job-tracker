@@ -3,7 +3,13 @@ import sqlite3
 from dataclasses import asdict
 
 from job_tracker.models.answers import FormAnswer, FormField
-from job_tracker.models.application import OPEN_STATUSES, Application, ApplicationStatus, TailoredResume
+from job_tracker.models.application import (
+    OPEN_STATUSES,
+    SENT_STATUSES,
+    Application,
+    ApplicationStatus,
+    TailoredResume,
+)
 from job_tracker.models.resume import SkillLine
 
 _WITH_RESUME = """
@@ -42,6 +48,41 @@ class ApplicationRepository:
             (job_id, *OPEN_STATUSES),
         ).fetchone()
         return None if row is None else _application(row)
+
+    def sent_for_job(self, job_id: int) -> Application | None:
+        placeholders = ",".join("?" * len(SENT_STATUSES))
+        row = self._conn.execute(
+            f"{_WITH_RESUME} WHERE applications.job_id = ? AND applications.status IN ({placeholders})",
+            (job_id, *SENT_STATUSES),
+        ).fetchone()
+        return None if row is None else _application(row)
+
+    def start_submitting(self, application_id: int, now: str) -> None:
+        self._conn.execute(
+            "UPDATE applications SET status = 'submitting', error = NULL, screenshot = 0, updated_at = ? WHERE id = ?",
+            (now, application_id),
+        )
+
+    def finish_submitting(
+        self,
+        application_id: int,
+        status: ApplicationStatus,
+        now: str,
+        error: str | None = None,
+        screenshot: bool = False,
+    ) -> None:
+        submitted_at = now if status == "submitted" else None
+        self._conn.execute(
+            "UPDATE applications SET status = ?, error = ?, screenshot = ?, submitted_at = ?, updated_at = ?"
+            " WHERE id = ?",
+            (status, error, screenshot, submitted_at, now, application_id),
+        )
+
+    def interrupt_submitting(self, message: str, now: str) -> None:
+        self._conn.execute(
+            "UPDATE applications SET status = 'needs_manual', error = ?, updated_at = ? WHERE status = 'submitting'",
+            (message, now),
+        )
 
     def failed_for_job(self, job_id: int) -> list[Application]:
         rows = self._conn.execute(
@@ -161,6 +202,8 @@ def _application(row: sqlite3.Row) -> Application:
         resume=resume,
         answers=None if row["answers"] is None else _answers(row["answers"]),
         form_error=row["form_error"],
+        submitted_at=row["submitted_at"],
+        screenshot=bool(row["screenshot"]),
     )
 
 

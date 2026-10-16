@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { applyToJob } from "../api/applications";
 import { dismissJob, rescoreJob } from "../api/jobs";
+import { APPLICATION_LABELS } from "../types/application";
 import type { FilteredJob, Job } from "../types/job";
 import { FILTER_LABELS, PLATFORM_LABELS, companyName, formatSalary, fullDate, timeAgo } from "../utils/format";
 import { AlertIcon, ExternalIcon, PinIcon } from "./icons";
@@ -24,7 +25,7 @@ export function JobDetail({
   const [error, setError] = useState<string | null>(null);
   const rejection = "rejection" in job ? job.rejection : null;
   const location = job.locations.join(" · ");
-  const openApplication = job.application?.status === "failed" ? null : job.application;
+  const openApplication = job.application;
 
   useEffect(() => {
     dialog.current?.showModal();
@@ -98,7 +99,7 @@ export function JobDetail({
         <div className="job-detail-actions">
           {openApplication ? (
             <a className="button button-primary" href={`#/applications/${openApplication.id}`}>
-              {openApplication.status === "drafting" ? "View tailoring progress" : "Review application"}
+              {APPLICATION_LABELS[openApplication.status].action}
             </a>
           ) : (
             <button

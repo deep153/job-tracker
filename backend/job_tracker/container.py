@@ -37,8 +37,11 @@ class Services:
     answer_bank: AnswerBankService
 
 
-def build_services(db_path: Path, http: httpx.Client, office: LibreOffice | None, llm: LLM | None) -> Services:
-    """`http` is used for every outside HTTP call except Claude's; resume files are kept next to the database."""
+def build_services(
+    db_path: Path, http: httpx.Client, office: LibreOffice | None, llm: LLM | None, visible_browser: bool
+) -> Services:
+    """`http` is used for every outside HTTP call except Claude's; resume files are kept next to the database.
+    `visible_browser` shows the browser while it sends an application."""
     db = Database(db_path)
     db.initialize()
     office = office or LibreOffice.detect()
@@ -52,5 +55,7 @@ def build_services(db_path: Path, http: httpx.Client, office: LibreOffice | None
     scorer = FitScorer(llm)
     runs = RunService(db, settings, resumes, BraveSearch(http), job_boards, scorer)
     jobs = JobService(db, settings, resumes, scorer)
-    applications = ApplicationService(db, files_dir, settings, resumes, ResumeTailor(llm), office, form_submitters())
+    applications = ApplicationService(
+        db, files_dir, settings, resumes, ResumeTailor(llm), office, form_submitters(visible_browser)
+    )
     return Services(office, settings, resumes, jobs, runs, applications, CostService(db), AnswerBankService(db))
