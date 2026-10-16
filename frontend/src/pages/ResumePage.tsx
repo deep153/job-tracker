@@ -81,8 +81,8 @@ export function ResumePage() {
         <div className="page-heading">
           <h1>Resume</h1>
           <p className="subtitle">
-            Your master resume. When you apply, only the Summary is rewritten and your Skills reordered; everything
-            else stays exactly as it is.
+            Your master resume. When you apply, only the Summary is rewritten and your Skills reordered; everything else
+            stays exactly as it is.
           </p>
         </div>
 
@@ -188,8 +188,8 @@ function UploadCard({ uploading, onFile }: { uploading: boolean; onFile: (file: 
       </div>
       <h2>Upload your resume</h2>
       <p>
-        Drop your resume here as a Word document (.docx). It becomes the template for every tailored resume, so use
-        the version you'd send today.
+        Drop your resume here as a Word document (.docx). It becomes the template for every tailored resume, so use the
+        version you'd send today.
       </p>
       <FileButton label="Choose .docx file" busyLabel="Importing…" busy={uploading} primary onFile={onFile} />
     </section>
@@ -489,7 +489,11 @@ function Preview({ resume }: { resume: Resume }) {
           <span className="visually-hidden">(opens in a new tab)</span>
         </a>
       </div>
-      <iframe className="resume-preview" src={`${resume.preview_url}#view=FitH&navpanes=0`} title="PDF preview of your resume" />
+      <iframe
+        className="resume-preview"
+        src={`${resume.preview_url}#view=FitH&navpanes=0`}
+        title="PDF preview of your resume"
+      />
     </section>
   );
 }

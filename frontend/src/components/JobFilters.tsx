@@ -70,11 +70,7 @@ export function JobFilters({
       </label>
       <label className="job-filter">
         <span className="job-filter-label">Sort by</span>
-        <select
-          className="text-input"
-          value={query.sort}
-          onChange={(e) => update({ sort: e.target.value as JobSort })}
-        >
+        <select className="text-input" value={query.sort} onChange={(e) => update({ sort: e.target.value as JobSort })}>
           <option value="score">Best fit</option>
           <option value="posted">Recently updated</option>
         </select>

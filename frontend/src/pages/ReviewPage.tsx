@@ -36,7 +36,8 @@ export function ReviewPage({ id }: { id: number }) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const working = application?.status === "drafting" || application?.status === "submitting";
   const sent = application !== null && APPLIED_STATUSES.includes(application.status);
-  const submitFailed = application?.status === "failed" && application.resume !== null && application.questions !== null;
+  const submitFailed =
+    application?.status === "failed" && application.resume !== null && application.questions !== null;
 
   useEffect(() => {
     let cancelled = false;
@@ -85,7 +86,9 @@ export function ReviewPage({ id }: { id: number }) {
             </a>
           </div>
         )}
-        {!application && !loadError && <div className="skeleton resume-skeleton" aria-busy="true" aria-label="Loading" />}
+        {!application && !loadError && (
+          <div className="skeleton resume-skeleton" aria-busy="true" aria-label="Loading" />
+        )}
         {application?.status === "drafting" && <Drafting application={application} />}
         {application?.status === "submitting" && <Submitting />}
         {application && APPLIED_STATUSES.includes(application.status) && (
@@ -125,8 +128,8 @@ function Submitting() {
       <div>
         <h2 className="panel-title">Sending your application…</h2>
         <p className="panel-empty">
-          A browser window opened on the company's application form. Your reviewed answers are being filled in and
-          your tailored resume uploaded, then the form is submitted. You can watch, but please don't type in it.
+          A browser window opened on the company's application form. Your reviewed answers are being filled in and your
+          tailored resume uploaded, then the form is submitted. You can watch, but please don't type in it.
         </p>
       </div>
     </section>

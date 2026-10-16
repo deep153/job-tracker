@@ -502,8 +502,8 @@ function RunSummary({ run, onReview }: { run: Run; onReview: () => void }) {
       {run.search_queries_capped && (
         <div className="notice notice-muted" role="status">
           <span className="notice-text">
-            Only the first {run.search_queries} role and location combinations were searched this run. Remove some
-            roles or locations to cover them all.
+            Only the first {run.search_queries} role and location combinations were searched this run. Remove some roles
+            or locations to cover them all.
           </span>
         </div>
       )}
@@ -529,15 +529,7 @@ function RunSummary({ run, onReview }: { run: Run; onReview: () => void }) {
   );
 }
 
-function ErrorBanner({
-  message,
-  onRetry,
-  onDismiss,
-}: {
-  message: string;
-  onRetry: () => void;
-  onDismiss: () => void;
-}) {
+function ErrorBanner({ message, onRetry, onDismiss }: { message: string; onRetry: () => void; onDismiss: () => void }) {
   return (
     <div className="notice notice-error" role="alert">
       <AlertIcon />

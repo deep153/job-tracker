@@ -162,8 +162,8 @@ export function JobDetail({
           {job.score ? (
             <>
               <p className="job-detail-note">
-                Scored {job.score.score} of 100 against resume version {job.score.resume_version} by{" "}
-                {job.score.model}, {timeAgo(job.score.scored_at)}.
+                Scored {job.score.score} of 100 against resume version {job.score.resume_version} by {job.score.model},{" "}
+                {timeAgo(job.score.scored_at)}.
               </p>
               <ScoreDetails score={job.score} />
             </>
