@@ -141,7 +141,11 @@ class JobRepository:
         )
 
     def filtered_out(self) -> list[Job]:
-        return self._many(f"{_VISIBLE} AND jobs.rejected_rule IS NOT NULL ORDER BY jobs.updated_at DESC")
+        """Near misses: visible jobs whose title matched one of my roles but that another rule rejected."""
+        return self._many(
+            f"{_VISIBLE} AND jobs.rejected_rule IS NOT NULL AND jobs.rejected_rule != 'role' "
+            "ORDER BY jobs.updated_at DESC"
+        )
 
     def _listed(self, condition: str, params: list[object], query: JobQuery) -> list[Job]:
         if query.company is not None:

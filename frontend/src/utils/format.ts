@@ -17,8 +17,9 @@ export const FILTER_LABELS: Record<FilterRule, string> = {
   salary: "Salary",
 };
 
-export function totalFilteredOut(counts: Record<FilterRule, number>): number {
-  return Object.values(counts).reduce((sum, n) => sum + n, 0);
+/** Near misses: jobs whose title matched one of my roles but that another filter dropped. */
+export function nearMisses(counts: Record<FilterRule, number>): number {
+  return Object.entries(counts).reduce((sum, [rule, n]) => (rule === "role" ? sum : sum + n), 0);
 }
 
 const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [

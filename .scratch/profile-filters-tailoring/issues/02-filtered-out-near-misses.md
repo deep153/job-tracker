@@ -4,12 +4,12 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The filtered-out job list excludes jobs rejected by the role rule
-- [ ] Jobs rejected by any other rule are still listed
-- [ ] Role-rejected jobs stay stored and are re-checked when search settings change
-- [ ] The run summary shows role rejections as one "other roles at these companies skipped" line, separate from the per-rule near-miss counts
-- [ ] The "Review filtered jobs" prompt and the tab's count include only near misses, and the prompt is hidden when there are none
-- [ ] Test: after a run with one role-rejected and one location-rejected job, the filtered-out list contains only the location-rejected job
-- [ ] Test: adding a role in search settings that matches a previously role-rejected job brings it back into the scoring path
+- [x] The filtered-out job list excludes jobs rejected by the role rule
+- [x] Jobs rejected by any other rule are still listed
+- [x] Role-rejected jobs stay stored and are re-checked when search settings change
+- [x] The run summary shows role rejections as one "other roles at these companies skipped" line, separate from the per-rule near-miss counts
+- [x] The "Review filtered jobs" prompt and the tab's count include only near misses, and the prompt is hidden when there are none
+- [x] Test: after a run with one role-rejected and one location-rejected job, the filtered-out list contains only the location-rejected job
+- [x] Test: adding a role in search settings that matches a previously role-rejected job brings it back into the scoring path

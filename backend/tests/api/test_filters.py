@@ -48,9 +48,22 @@ def test_title_must_match_one_of_my_roles(client: TestClient, boards: FakeJobBoa
     )
 
     assert shown(client) == ["Backend Engineering Lead", "Senior Backend Engineer", "Software Engineer, Back-end"]
-    assert rejections(client) == {"Frontend Engineer": ("role", "Title doesn't match any of your roles.")}
+    assert rejections(client) == {}  # other roles aren't near misses, so they aren't listed
     assert run["filtered_out"]["role"] == 1
     assert sum(run["filtered_out"].values()) == 1
+
+
+def test_filtered_out_lists_only_near_misses_whose_title_matched(client: TestClient, boards: FakeJobBoards) -> None:
+    run = run_with(
+        client,
+        boards,
+        [job("Backend Engineer"), job("Backend Engineer", "Austin, TX"), job("Lead Client Partner")],
+        roles=["Backend Engineer"],
+        locations=[NYC],
+    )
+
+    assert rejections(client) == {"Backend Engineer": ("location", "Austin, TX isn't one of your locations.")}
+    assert (run["filtered_out"]["role"], run["filtered_out"]["location"]) == (1, 1)
 
 
 def test_title_must_not_contain_an_excluded_keyword(client: TestClient, boards: FakeJobBoards) -> None:
@@ -204,8 +217,11 @@ def test_changing_settings_reapplies_filters_to_stored_jobs_without_fetching(
     client.put("/api/search-settings", json={**READY_SETTINGS, "roles": ["Frontend Engineer"]})
 
     assert shown(client) == ["Frontend Engineer"]
-    assert set(rejections(client)) == {"Backend Engineer"}
+    assert rejections(client) == {}
     assert boards.fetched_boards == []
+
+    client.put("/api/search-settings", json={**READY_SETTINGS, "roles": ["Engineer"]})
+    assert shown(client) == ["Backend Engineer", "Frontend Engineer"]
 
 
 def test_more_filters_round_trip(client: TestClient) -> None:

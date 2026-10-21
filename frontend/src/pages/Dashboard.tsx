@@ -24,7 +24,7 @@ import {
   formatSalary,
   fullDate,
   timeAgo,
-  totalFilteredOut,
+  nearMisses,
 } from "../utils/format";
 
 const POLL_INTERVAL_MS = 700;
@@ -408,7 +408,7 @@ function RunProgress({ run }: { run: Run }) {
         <span className="notice-text">
           Fetching boards: {run.companies_fetched} of {plural(run.companies_total, "company", "companies")}
           {run.new_jobs > 0 && ` · ${plural(run.new_jobs, "new job")} so far`}
-          {totalFilteredOut(run.filtered_out) > 0 && ` · ${totalFilteredOut(run.filtered_out)} filtered out`}
+          {nearMisses(run.filtered_out) > 0 && ` · ${nearMisses(run.filtered_out)} filtered out`}
         </span>
       </div>
       <div
@@ -460,8 +460,11 @@ function RunSummary({ run, onReview }: { run: Run; onReview: () => void }) {
     run.scored_jobs > 0 && plural(run.matched_jobs, "new match", "new matches"),
     run.ai_cost_usd > 0 && `about ${formatCost(run.ai_cost_usd)} AI cost`,
   ].filter(Boolean);
-  const filteredOut = totalFilteredOut(run.filtered_out);
-  const byRule = (Object.entries(run.filtered_out) as [FilterRule, number][]).filter(([, count]) => count > 0);
+  const filteredOut = nearMisses(run.filtered_out);
+  const otherRoles = run.filtered_out.role ?? 0;
+  const byRule = (Object.entries(run.filtered_out) as [FilterRule, number][]).filter(
+    ([rule, count]) => rule !== "role" && count > 0,
+  );
 
   return (
     <>
@@ -486,6 +489,14 @@ function RunSummary({ run, onReview }: { run: Run; onReview: () => void }) {
           <button type="button" className="button button-ghost" onClick={onReview}>
             Review
           </button>
+        </div>
+      )}
+      {otherRoles > 0 && (
+        <div className="notice notice-muted" role="status">
+          <span className="notice-text">
+            {otherRoles.toLocaleString()} other {otherRoles === 1 ? "role" : "roles"} at these companies skipped: their
+            titles don't match your roles.
+          </span>
         </div>
       )}
       {searchErrors.map((error) => (
@@ -612,7 +623,10 @@ function FilteredEmptyState() {
         <SlidersIcon size={28} />
       </div>
       <h2>Nothing filtered out</h2>
-      <p>Jobs that don't fit your search settings or filters show up here, each with the reason it was dropped.</p>
+      <p>
+        Jobs whose title matches your roles but that another filter dropped (location, seniority, experience, salary or
+        sponsorship) show up here, each with the reason. Other roles at the same companies aren't listed.
+      </p>
     </section>
   );
 }
@@ -705,8 +719,11 @@ function EmptyState({
         <div className="empty-icon" aria-hidden="true">
           <BriefcaseIcon />
         </div>
-        <h2>No open jobs right now</h2>
-        <p>None of the companies you track have open postings. Run again later, or broaden your search settings.</p>
+        <h2>No open jobs for your roles right now</h2>
+        <p>
+          None of the companies you track have open postings matching your roles. Run again later, or broaden your
+          search settings.
+        </p>
       </section>
     );
   }
