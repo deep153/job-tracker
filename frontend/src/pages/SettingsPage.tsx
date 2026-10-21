@@ -230,7 +230,15 @@ function CostSummary({ costs }: { costs: AiCosts }) {
                 <tbody>
                   {costs.recent_runs.map((run) => (
                     <tr key={run.id}>
-                      <td>#{run.id}</td>
+                      <td>
+                        #{run.id}
+                        {run.kind === "scoring" && (
+                          <>
+                            {" "}
+                            <span className="badge">Scoring only</span>
+                          </>
+                        )}
+                      </td>
                       <td>
                         <time dateTime={run.started_at} title={fullDate(run.started_at)}>
                           {timeAgo(run.started_at)}

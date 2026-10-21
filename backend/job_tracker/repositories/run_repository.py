@@ -5,7 +5,7 @@ from dataclasses import asdict
 
 from job_tracker.models.ai import RunCost
 from job_tracker.models.job import RULES, Rule
-from job_tracker.models.run import Run, RunError, RunStage, RunStatus
+from job_tracker.models.run import Run, RunError, RunKind, RunStage, RunStatus
 
 
 class RunRepository:
@@ -18,9 +18,10 @@ class RunRepository:
     def any_running(self) -> bool:
         return self._conn.execute("SELECT 1 FROM runs WHERE status = 'running'").fetchone() is not None
 
-    def create(self, started_at: str) -> int:
+    def create(self, started_at: str, kind: RunKind = "full") -> int:
+        stage: RunStage = "discovering" if kind == "full" else "scoring"
         run_id = self._conn.execute(
-            "INSERT INTO runs (status, stage, started_at) VALUES ('running', 'discovering', ?)", (started_at,)
+            "INSERT INTO runs (status, stage, started_at, kind) VALUES ('running', ?, ?, ?)", (stage, started_at, kind)
         ).lastrowid
         assert run_id is not None
         return run_id
@@ -36,7 +37,9 @@ class RunRepository:
         rows = self._conn.execute(
             "SELECT * FROM runs WHERE scoring_total > 0 OR ai_cost_usd > 0 ORDER BY id DESC LIMIT ?", (limit,)
         ).fetchall()
-        return [RunCost(row["id"], row["started_at"], row["scored_jobs"], row["ai_cost_usd"]) for row in rows]
+        return [
+            RunCost(row["id"], row["started_at"], row["scored_jobs"], row["ai_cost_usd"], row["kind"]) for row in rows
+        ]
 
     def finish(self, run_id: int, status: RunStatus, finished_at: str) -> None:
         self._conn.execute("UPDATE runs SET status = ?, finished_at = ? WHERE id = ?", (status, finished_at, run_id))
@@ -101,6 +104,7 @@ def _run(row: sqlite3.Row) -> Run:
         stage=row["stage"],
         started_at=row["started_at"],
         finished_at=row["finished_at"],
+        kind=row["kind"],
         search_queries=row["search_queries"],
         search_queries_capped=bool(row["search_queries_capped"]),
         companies_discovered=row["companies_discovered"],

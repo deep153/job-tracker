@@ -71,7 +71,8 @@ CREATE TABLE IF NOT EXISTS runs (
     scoring_total INTEGER NOT NULL DEFAULT 0,
     scored_jobs INTEGER NOT NULL DEFAULT 0,
     matched_jobs INTEGER NOT NULL DEFAULT 0,
-    ai_cost_usd REAL NOT NULL DEFAULT 0
+    ai_cost_usd REAL NOT NULL DEFAULT 0,
+    kind TEXT NOT NULL DEFAULT 'full'
 );
 
 CREATE TABLE IF NOT EXISTS scores (
@@ -195,6 +196,7 @@ _ADDED_COLUMNS = {
         "scored_jobs": "INTEGER NOT NULL DEFAULT 0",
         "matched_jobs": "INTEGER NOT NULL DEFAULT 0",
         "ai_cost_usd": "REAL NOT NULL DEFAULT 0",
+        "kind": "TEXT NOT NULL DEFAULT 'full'",
     },
     "applications": {
         "answers": "TEXT",

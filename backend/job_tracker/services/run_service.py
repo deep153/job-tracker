@@ -15,7 +15,7 @@ from job_tracker.models.job import FitResult, Job
 from job_tracker.models.platform import Platform
 from job_tracker.models.posting import Posting
 from job_tracker.models.resume import MasterResume
-from job_tracker.models.run import Run, RunError, RunStatus
+from job_tracker.models.run import Run, RunError, RunKind, RunStatus
 from job_tracker.models.search_settings import SearchSettings
 from job_tracker.services.board_sync import sync_board
 from job_tracker.services.discovery import discover
@@ -113,29 +113,44 @@ class RunService:
         with self._db.transaction() as uow:
             return uow.runs.recent(RECENT_RUNS)
 
+    def unscored_count(self) -> int:
+        """How many jobs a scoring-only run would score now."""
+        resume = self._resumes.master()
+        if resume is None:
+            return 0
+        with self._db.transaction() as uow:
+            return len(uow.jobs.needing_score(resume.version))
+
     def start(self) -> Run:
-        inputs = self._inputs()
+        return self._start("full", self._inputs(scoring_only=False))
+
+    def start_scoring(self) -> Run:
+        """Score the jobs that have no score for the current resume, without searching or fetching boards."""
+        return self._start("scoring", self._inputs(scoring_only=True))
+
+    def _start(self, kind: RunKind, inputs: RunInputs) -> Run:
         with self._start_lock, self._db.transaction() as uow:
             if uow.runs.any_running():
                 raise RunAlreadyActiveError
-            run_id = uow.runs.create(_now())
-        threading.Thread(target=self._execute, args=(run_id, inputs), daemon=True).start()
+            run_id = uow.runs.create(_now(), kind)
+        threading.Thread(target=self._execute, args=(run_id, kind, inputs), daemon=True).start()
         return self.get(run_id)
 
-    def _inputs(self) -> RunInputs:
-        missing = self.missing()
-        search_api_key = self._settings.search_api_key()
+    def _inputs(self, scoring_only: bool) -> RunInputs:
+        missing = scoring_missing(self._settings, self._resumes) if scoring_only else self.missing()
+        search_api_key = self._settings.search_api_key() or ""
         ai = self._settings.ai()
         resume = self._resumes.master()
-        if missing or search_api_key is None or ai.anthropic_api_key is None or resume is None:
+        if missing or (not search_api_key and not scoring_only) or ai.anthropic_api_key is None or resume is None:
             raise SetupIncompleteError(missing)
         return RunInputs(self._settings.search(), search_api_key, ai.anthropic_api_key, ai.scoring_model, resume)
 
-    def _execute(self, run_id: int, inputs: RunInputs) -> None:
+    def _execute(self, run_id: int, kind: RunKind, inputs: RunInputs) -> None:
         status: RunStatus = "finished"
         try:
-            self._discover(run_id, inputs.search_settings, inputs.search_api_key)
-            self._fetch_all(run_id, inputs.search_settings)
+            if kind == "full":
+                self._discover(run_id, inputs.search_settings, inputs.search_api_key)
+                self._fetch_all(run_id, inputs.search_settings)
             self._score_all(run_id, inputs)
         except Exception:
             log.exception("run %s failed", run_id)

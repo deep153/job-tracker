@@ -9,6 +9,7 @@ export type RunError =
 
 export type Run = {
   id: number;
+  kind: "full" | "scoring";
   status: RunStatus;
   stage: "discovering" | "fetching" | "scoring";
   started_at: string;

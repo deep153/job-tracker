@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ApiError } from "../api/client";
 import { listCompanies } from "../api/companies";
 import { dismissJob, listFilteredOutJobs, listJobs, listJobsBelowThreshold } from "../api/jobs";
-import { getRun, listRuns, startRun } from "../api/runs";
+import { getRun, getUnscoredCount, listRuns, startRun, startScoringRun } from "../api/runs";
 import { getSearchSettings } from "../api/searchSettings";
 import { CompaniesPanel } from "../components/CompaniesPanel";
 import { AlertIcon, BriefcaseIcon, CheckIcon, ExternalIcon, PinIcon, PlayIcon, SlidersIcon } from "../components/icons";
@@ -40,6 +40,7 @@ export function Dashboard() {
   const [filtered, setFiltered] = useState<FilteredJob[] | null>(null);
   const [view, setView] = useState<View>("matches");
   const [run, setRun] = useState<Run | null>(null);
+  const [unscored, setUnscored] = useState(0);
   const [settings, setSettings] = useState<SearchSettings | null>(null);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [starting, setStarting] = useState(false);
@@ -84,12 +85,14 @@ export function Dashboard() {
     ]);
   }
   const loadCompanies = () => load(listCompanies, setCompanies);
+  const loadUnscored = () => load(getUnscoredCount, setUnscored);
 
   async function loadAll() {
     setFailure(null);
     await Promise.all([
       loadJobs(),
       loadCompanies(),
+      loadUnscored(),
       load(getSearchSettings, setSettings),
       load(listRuns, ([latest]) => setRun(latest ?? null)),
     ]);
@@ -129,6 +132,9 @@ export function Dashboard() {
         if (next.stage !== run.stage || next.status !== "running") {
           void loadCompanies();
         }
+        if (next.status !== "running") {
+          void loadUnscored();
+        }
         setRun(next);
       } catch (e) {
         setFailure({ message: (e as Error).message, retry: loadAll });
@@ -137,23 +143,25 @@ export function Dashboard() {
     return () => clearTimeout(timer);
   }, [run]);
 
-  async function startRunAndFollow() {
+  async function startAndFollow(start: () => Promise<Run>, retry: () => void) {
     setStarting(true);
     setFailure(null);
     try {
-      setRun(await startRun());
+      setRun(await start());
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
         await load(listRuns, ([latest]) => setRun(latest ?? null));
       } else if (e instanceof ApiError && e.status === 400) {
         await load(getSearchSettings, setSettings);
       } else {
-        setFailure({ message: `Couldn't start the run. ${(e as Error).message}`, retry: startRunAndFollow });
+        setFailure({ message: `Couldn't start the run. ${(e as Error).message}`, retry });
       }
     } finally {
       setStarting(false);
     }
   }
+  const startRunAndFollow = () => startAndFollow(startRun, startRunAndFollow);
+  const scoreUnscored = () => startAndFollow(startScoringRun, scoreUnscored);
 
   function updateCompany(updated: Company) {
     setCompanies((current) => current.map((c) => (c.id === updated.id ? updated : c)));
@@ -181,6 +189,7 @@ export function Dashboard() {
   function updateRescored(job: Job | FilteredJob) {
     setSelected(job);
     void loadJobs();
+    void loadUnscored();
   }
 
   return (
@@ -223,6 +232,7 @@ export function Dashboard() {
           {settings && !settings.ready && !running && <SetupNotice missing={settings.missing} />}
           {run?.status === "running" && <RunProgress run={run} />}
           {run && run.status !== "running" && <RunSummary run={run} onReview={() => setView("filtered")} />}
+          {!running && unscored > 0 && <UnscoredNotice count={unscored} onScore={scoreUnscored} />}
 
           {dismissed && (
             <div className="notice notice-muted" role="status">
@@ -439,13 +449,14 @@ function RunSummary({ run, onReview }: { run: Run; onReview: () => void }) {
   const searchErrors = run.errors.filter((e) => e.kind === "search");
   const boardErrors = run.errors.filter((e) => e.kind === "board");
   const scoringErrors = run.errors.filter((e) => e.kind === "scoring");
+  const full = run.kind === "full";
   const changes = [
-    run.companies_discovered > 0 && plural(run.companies_discovered, "new company", "new companies"),
-    `${plural(run.companies_total, "company", "companies")} checked`,
-    run.new_jobs === 0 ? "no new jobs" : plural(run.new_jobs, "new job"),
+    full && run.companies_discovered > 0 && plural(run.companies_discovered, "new company", "new companies"),
+    full && `${plural(run.companies_total, "company", "companies")} checked`,
+    full && (run.new_jobs === 0 ? "no new jobs" : plural(run.new_jobs, "new job")),
     run.updated_jobs > 0 && `${run.updated_jobs} updated`,
     run.closed_jobs > 0 && `${run.closed_jobs} closed`,
-    run.scored_jobs > 0 && `${run.scored_jobs} scored`,
+    (run.scored_jobs > 0 || !full) && `${run.scored_jobs} scored`,
     run.scored_jobs > 0 && plural(run.matched_jobs, "new match", "new matches"),
     run.ai_cost_usd > 0 && `about ${formatCost(run.ai_cost_usd)} AI cost`,
   ].filter(Boolean);
@@ -457,7 +468,7 @@ function RunSummary({ run, onReview }: { run: Run; onReview: () => void }) {
       <div className="notice notice-success" role="status">
         <CheckIcon />
         <span className="notice-text">
-          Run finished {when} · {changes.join(" · ")}
+          {full ? "Run finished" : "Scoring-only run finished"} {when} · {changes.join(" · ")}
         </span>
       </div>
       {filteredOut > 0 && (
@@ -526,6 +537,21 @@ function RunSummary({ run, onReview }: { run: Run; onReview: () => void }) {
         </div>
       )}
     </>
+  );
+}
+
+function UnscoredNotice({ count, onScore }: { count: number; onScore: () => void }) {
+  return (
+    <div className="notice notice-info" role="status">
+      <AlertIcon />
+      <span className="notice-text">
+        {plural(count, "job passes", "jobs pass")} your filters but {count === 1 ? "has" : "have"} no score for your
+        current resume. Scoring {count === 1 ? "it doesn't" : "them doesn't"} search or fetch boards.
+      </span>
+      <button type="button" className="button button-secondary" onClick={onScore}>
+        Score {plural(count, "unscored job")}
+      </button>
+    </div>
   );
 }
 

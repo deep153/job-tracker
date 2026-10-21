@@ -59,6 +59,7 @@ def costs_json(summary: CostSummary) -> dict[str, Any]:
         "recent_runs": [
             {
                 "id": run.run_id,
+                "kind": run.kind,
                 "started_at": run.started_at,
                 "scored_jobs": run.scored_jobs,
                 "ai_cost_usd": run.ai_cost_usd,

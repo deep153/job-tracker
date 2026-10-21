@@ -63,6 +63,7 @@ class FakeLLM:
         self._tailorings: list[dict[str, Any] | LLMError] = []
         self._drafts: dict[str, str] = {}
         self._failure: LLMError | None = None
+        self._release: threading.Event | None = None
         self._lock = threading.Lock()
         self.calls: list[LLMCall] = []
 
@@ -90,6 +91,11 @@ class FakeLLM:
         """Every call raises `error` from now on (or, given None, answers normally again)."""
         self._failure = error
 
+    def hold(self) -> threading.Event:
+        """Block every call until the returned event is set."""
+        self._release = threading.Event()
+        return self._release
+
     def scored_titles(self) -> list[str]:
         return sorted(_title(call.prompt) for call in self.calls if call.is_scoring)
 
@@ -106,6 +112,8 @@ class FakeLLM:
         self, *, api_key: str, model: str, system: str, prompt: str, schema: dict[str, Any], max_tokens: int
     ) -> LLMResponse:
         call = LLMCall(api_key, model, system, prompt, schema)
+        if self._release is not None:
+            self._release.wait(timeout=10)
         with self._lock:
             self.calls.append(call)
             tailored = self._tailorings.pop(0) if call.is_tailoring and self._tailorings else None

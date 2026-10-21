@@ -4,6 +4,7 @@ from typing import Literal
 from job_tracker.models.job import Rule
 from job_tracker.models.platform import Platform
 
+RunKind = Literal["full", "scoring"]  # a scoring-only run skips discovery and fetching
 RunStatus = Literal["running", "finished", "failed", "interrupted"]
 RunStage = Literal["discovering", "fetching", "scoring"]
 RunErrorKind = Literal["search", "board", "scoring"]
@@ -26,6 +27,7 @@ class Run:
     stage: RunStage
     started_at: str
     finished_at: str | None
+    kind: RunKind = "full"
     search_queries: int = 0
     search_queries_capped: bool = False
     companies_discovered: int = 0

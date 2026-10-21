@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+from job_tracker.models.run import RunKind
+
 DEFAULT_SCORING_MODEL = "claude-haiku-5-5"
 DEFAULT_TAILORING_MODEL = "claude-sonnet-5-5"
 
@@ -28,6 +30,7 @@ class RunCost:
     started_at: str
     scored_jobs: int
     ai_cost_usd: float
+    kind: RunKind = "full"
 
 
 @dataclass(frozen=True)

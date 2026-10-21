@@ -10,7 +10,7 @@ from job_tracker.models.search_settings import SearchSettings
 MAX_REASONS = 5
 MAX_KEYWORDS = 15
 MAX_DESCRIPTION_CHARS = 20_000
-MAX_OUTPUT_TOKENS = 1_000
+MAX_OUTPUT_TOKENS = 3_000
 
 _SENIORITY_NAMES = {
     "intern": "intern",
@@ -33,8 +33,8 @@ Score from 0 to 100:
 Judge from evidence in the resume only; don't assume skills it doesn't show. Reasons are short sentences \
 (at most 5), most important first, written to the job seeker ("You have...", "The role needs..."). \
 Matched keywords are skills, tools and qualifications the posting asks for that the resume shows; missing \
-keywords are ones the posting asks for that the resume lacks. Use the posting's wording for keywords and \
-keep each to a few words."""
+keywords are ones the posting asks for that the resume lacks. Give at most 15 of each, most important first. \
+Use the posting's wording for keywords and keep each to a few words."""
 
 SCHEMA: dict[str, Any] = {
     "type": "object",

@@ -5,7 +5,14 @@ from fastapi.testclient import TestClient
 
 from job_tracker.clients.claude import LLMError
 from job_tracker.services.pricing import estimate_cost
-from tests.support.api import ANTHROPIC_KEY, READY_SETTINGS, SEARCH_KEY, discover_boards, run_to_completion
+from tests.support.api import (
+    ANTHROPIC_KEY,
+    READY_SETTINGS,
+    SEARCH_KEY,
+    discover_boards,
+    run_to_completion,
+    wait_for_run,
+)
 from tests.support.fake_job_boards import FakeJobBoards, greenhouse_job
 from tests.support.fake_llm import FakeLLM
 from tests.support.resumes import SKILL_LINES, SUMMARY, add_ready_resume, mapping_for, sample_resume, upload
@@ -253,6 +260,56 @@ def test_invalid_or_failed_answers_are_reported_and_retried_next_run(
     run_to_completion(client)
     assert llm.scored_titles() == ["Backend Engineer", "Data Engineer"]
     assert matches(client) == [("Data Engineer", 90), ("Platform Engineer", 80), ("Backend Engineer", 75)]
+
+
+def test_a_scoring_only_run_scores_the_unscored_jobs_without_searching_or_fetching(
+    client: TestClient, boards: FakeJobBoards, llm: FakeLLM
+) -> None:
+    llm.answer("Backend Engineer", LLMError("Claude's answer was cut off."))
+    llm.answer("Data Engineer", LLMError("Claude's answer was cut off."))
+    run_with(client, boards, [job("Backend Engineer"), job("Platform Engineer"), job("Data Engineer")])
+    assert client.get("/api/runs/unscored").json() == {"count": 2}
+
+    llm.score("Backend Engineer", 75)
+    llm.score("Data Engineer", 90)
+    llm.calls.clear()
+    searches, fetches = len(boards.search_queries), len(boards.fetched_boards)
+    response = client.post("/api/runs/score")
+    assert response.status_code == 202, response.text
+    run = wait_for_run(client, response.json()["id"])
+
+    assert (run["kind"], run["status"], run["stage"]) == ("scoring", "finished", "scoring")
+    assert (run["scoring_total"], run["scored_jobs"], run["matched_jobs"]) == (2, 2, 2)
+    assert run["ai_cost_usd"] > 0
+    assert llm.scored_titles() == ["Backend Engineer", "Data Engineer"]
+    assert (len(boards.search_queries), len(boards.fetched_boards)) == (searches, fetches)
+    assert client.get("/api/runs/unscored").json() == {"count": 0}
+    assert [r["kind"] for r in client.get("/api/runs").json()] == ["scoring", "full"]
+    recent = client.get("/api/settings/costs").json()["recent_runs"]
+    assert [(r["kind"], r["scored_jobs"]) for r in recent] == [("scoring", 2), ("full", 1)]
+
+
+def test_a_scoring_only_run_and_a_full_run_never_overlap(
+    client: TestClient, boards: FakeJobBoards, llm: FakeLLM
+) -> None:
+    llm.answer("Backend Engineer", LLMError("Claude's answer was cut off."))
+    release_board = boards.hold("greenhouse", BOARD)
+    boards.serve_jobs(BOARD, [job("Backend Engineer")])
+    discover_boards(client, boards, [BOARD], {**READY_SETTINGS, "roles": ["Engineer"]})
+    full = client.post("/api/runs").json()
+
+    refused = client.post("/api/runs/score")
+    assert refused.status_code == 409
+    assert refused.json()["detail"] == "A run is already in progress."
+    release_board.set()
+    wait_for_run(client, full["id"])
+
+    llm.score("Backend Engineer", 80)
+    release_llm = llm.hold()
+    scoring = client.post("/api/runs/score").json()
+    assert client.post("/api/runs").status_code == 409
+    release_llm.set()
+    assert wait_for_run(client, scoring["id"])["scored_jobs"] == 1
 
 
 def test_answers_are_tidied(client: TestClient, boards: FakeJobBoards, llm: FakeLLM) -> None:
