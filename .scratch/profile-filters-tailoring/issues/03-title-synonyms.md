@@ -10,11 +10,11 @@ The table isn't user-configurable. Unrelated titles are still rejected.
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] "Backend Developer", "Back End Software Engineer", "Back-End Engineer" and "Sr. Backend Engineer" pass a "Backend Engineer" role
-- [ ] "SWE, Backend" passes a "Backend Software Engineer" role
-- [ ] "Front End Developer" passes a "Frontend Engineer" role
-- [ ] "Lead Client Partner" and "Global Strategic Accounts" are still rejected for a "Backend Engineer" role
-- [ ] Seniority detection still treats "Sr" titles as senior
-- [ ] Test: through the API, a run with fixture postings using these titles shows the expected jobs passing and failing the role rule
+- [x] "Backend Developer", "Back End Software Engineer", "Back-End Engineer" and "Sr. Backend Engineer" pass a "Backend Engineer" role
+- [x] "SWE, Backend" passes a "Backend Software Engineer" role
+- [x] "Front End Developer" passes a "Frontend Engineer" role
+- [x] "Lead Client Partner" and "Global Strategic Accounts" are still rejected for a "Backend Engineer" role
+- [x] Seniority detection still treats "Sr" titles as senior
+- [x] Test: through the API, a run with fixture postings using these titles shows the expected jobs passing and failing the role rule

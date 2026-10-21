@@ -53,6 +53,42 @@ def test_title_must_match_one_of_my_roles(client: TestClient, boards: FakeJobBoa
     assert sum(run["filtered_out"].values()) == 1
 
 
+def test_title_matching_understands_common_variants(client: TestClient, boards: FakeJobBoards) -> None:
+    run = run_with(
+        client,
+        boards,
+        [
+            job("Backend Developer"),
+            job("Back End Software Engineer"),
+            job("Back-End Engineer"),
+            job("Sr. Backend Engineer"),
+            job("SWE, Backend"),
+            job("Front End Developer"),
+            job("Lead Client Partner"),
+            job("Global Strategic Accounts"),
+        ],
+        roles=["Backend Engineer", "Backend Software Engineer", "Frontend Engineer"],
+    )
+
+    assert shown(client) == [
+        "Back End Software Engineer",
+        "Back-End Engineer",
+        "Backend Developer",
+        "Front End Developer",
+        "SWE, Backend",
+        "Sr. Backend Engineer",
+    ]
+    assert run["filtered_out"]["role"] == 2
+
+
+def test_sr_titles_still_count_as_senior(client: TestClient, boards: FakeJobBoards) -> None:
+    run_with(client, boards, [job("Sr. Backend Developer")], roles=["Backend Engineer"], seniority="junior")
+
+    assert rejections(client) == {
+        "Sr. Backend Developer": ("seniority", "Senior title, well above your level (junior)."),
+    }
+
+
 def test_filtered_out_lists_only_near_misses_whose_title_matched(client: TestClient, boards: FakeJobBoards) -> None:
     run = run_with(
         client,

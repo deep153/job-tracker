@@ -9,7 +9,9 @@ from job_tracker.models.search_settings import SearchSettings
 
 def check(posting: Posting, settings: SearchSettings) -> Rejection | None:
     """The first rule this posting breaks, or None if it passes them all."""
-    if settings.roles and not any(_has_phrase_words(posting.title, role) for role in settings.roles):
+    if settings.roles and not any(
+        _has_phrase_words(_normalized(posting.title), _normalized(role)) for role in settings.roles
+    ):
         return Rejection("role", "Title doesn't match any of your roles.")
     for keyword in settings.excluded_keywords:
         if _has_phrase_words(posting.title, keyword):
@@ -182,6 +184,22 @@ def _stem(word: str) -> str:
     if len(word) > 3 and word.endswith("s") and not word.endswith("ss"):
         return word[:-1]
     return word
+
+
+# Title synonyms, applied in order: phrases before words.
+_SYNONYMS = (
+    (re.compile(r"\b(back|front)[\s-]+end\b", re.I), r"\1end"),
+    (re.compile(r"\b(?:developer|dev)s?\b", re.I), "engineer"),
+    (re.compile(r"\bswes?\b", re.I), "software engineer"),
+    (re.compile(r"\bsr\b", re.I), "senior"),
+)
+
+
+def _normalized(title: str) -> str:
+    """A job title or role with common variants spelled one way ("Back End Dev" is "backend engineer")."""
+    for pattern, replacement in _SYNONYMS:
+        title = pattern.sub(replacement, title)
+    return title
 
 
 def _has_phrase_words(text: str, phrase: str) -> bool:
