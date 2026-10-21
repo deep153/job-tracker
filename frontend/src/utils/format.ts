@@ -18,8 +18,12 @@ export const FILTER_LABELS: Record<FilterRule, string> = {
 };
 
 /** Near misses: jobs whose title matched one of my roles but that another filter dropped. */
-export function nearMisses(counts: Record<FilterRule, number>): number {
-  return Object.entries(counts).reduce((sum, [rule, n]) => (rule === "role" ? sum : sum + n), 0);
+export function nearMissCounts(counts: Record<FilterRule, number>): [FilterRule, number][] {
+  return (Object.entries(counts) as [FilterRule, number][]).filter(([rule, count]) => rule !== "role" && count > 0);
+}
+
+export function nearMissCount(counts: Record<FilterRule, number>): number {
+  return nearMissCounts(counts).reduce((sum, [, count]) => sum + count, 0);
 }
 
 const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [

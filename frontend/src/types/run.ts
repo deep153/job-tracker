@@ -3,13 +3,16 @@ import type { Platform } from "./searchSettings";
 
 export type RunStatus = "running" | "finished" | "failed" | "interrupted";
 
+/** A scoring-only run skips discovery and fetching. */
+export type RunKind = "full" | "scoring";
+
 export type RunError =
   | { kind: "board"; platform: Platform; board_id: string; message: string }
   | { kind: "search" | "scoring"; platform: null; board_id: null; message: string };
 
 export type Run = {
   id: number;
-  kind: "full" | "scoring";
+  kind: RunKind;
   status: RunStatus;
   stage: "discovering" | "fetching" | "scoring";
   started_at: string;

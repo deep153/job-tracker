@@ -48,7 +48,7 @@ def test_title_must_match_one_of_my_roles(client: TestClient, boards: FakeJobBoa
     )
 
     assert shown(client) == ["Backend Engineering Lead", "Senior Backend Engineer", "Software Engineer, Back-end"]
-    assert rejections(client) == {}  # other roles aren't near misses, so they aren't listed
+    assert rejections(client) == {}
     assert run["filtered_out"]["role"] == 1
     assert sum(run["filtered_out"].values()) == 1
 
@@ -222,6 +222,7 @@ def test_changing_settings_reapplies_filters_to_stored_jobs_without_fetching(
 
     client.put("/api/search-settings", json={**READY_SETTINGS, "roles": ["Engineer"]})
     assert shown(client) == ["Backend Engineer", "Frontend Engineer"]
+    assert client.get("/api/runs/unscored").json() == {"count": 1}  # Frontend Engineer, never scored
 
 
 def test_more_filters_round_trip(client: TestClient) -> None:

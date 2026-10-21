@@ -13,7 +13,7 @@ import { SearchSettingsPanel } from "../components/SearchSettingsPanel";
 import { Topbar } from "../components/Topbar";
 import { APPLICATION_LABELS } from "../types/application";
 import type { Company } from "../types/company";
-import type { FilterRule, FilteredJob, Job, JobQuery } from "../types/job";
+import type { FilteredJob, Job, JobQuery } from "../types/job";
 import type { Run } from "../types/run";
 import type { SearchSettings } from "../types/searchSettings";
 import {
@@ -24,7 +24,8 @@ import {
   formatSalary,
   fullDate,
   timeAgo,
-  nearMisses,
+  nearMissCount,
+  nearMissCounts,
 } from "../utils/format";
 
 const POLL_INTERVAL_MS = 700;
@@ -55,6 +56,8 @@ export function Dashboard() {
   const [dismissed, setDismissed] = useState<string | null>(null);
   const running = starting || run?.status === "running";
   const ready = settings?.ready ?? false;
+  // Scoring needs only the Anthropic key and a marked resume, not the search setup.
+  const canScore = settings !== null && !settings.missing.some((item) => /anthropic|resume/i.test(item));
   const loaded = jobs !== null && below !== null && filtered !== null;
   const filtering = hasFilters(appliedQuery);
   const showTabs = loaded && (jobs.length > 0 || below.length > 0 || filtered.length > 0 || filtering);
@@ -166,6 +169,7 @@ export function Dashboard() {
   function updateCompany(updated: Company) {
     setCompanies((current) => current.map((c) => (c.id === updated.id ? updated : c)));
     void loadJobs();
+    void loadUnscored();
   }
 
   function removeDismissed(job: Job | FilteredJob) {
@@ -175,6 +179,7 @@ export function Dashboard() {
     setFiltered(without);
     setSelected(null);
     setDismissed(job.title);
+    void loadUnscored();
   }
 
   async function dismiss(job: Job | FilteredJob) {
@@ -207,6 +212,7 @@ export function Dashboard() {
               onChange={(next) => {
                 setSettings(next);
                 void loadJobs();
+                void loadUnscored();
               }}
             />
           ) : (
@@ -232,7 +238,7 @@ export function Dashboard() {
           {settings && !settings.ready && !running && <SetupNotice missing={settings.missing} />}
           {run?.status === "running" && <RunProgress run={run} />}
           {run && run.status !== "running" && <RunSummary run={run} onReview={() => setView("filtered")} />}
-          {!running && unscored > 0 && <UnscoredNotice count={unscored} onScore={scoreUnscored} />}
+          {!running && canScore && unscored > 0 && <UnscoredNotice count={unscored} onScore={scoreUnscored} />}
 
           {dismissed && (
             <div className="notice notice-muted" role="status">
@@ -408,7 +414,7 @@ function RunProgress({ run }: { run: Run }) {
         <span className="notice-text">
           Fetching boards: {run.companies_fetched} of {plural(run.companies_total, "company", "companies")}
           {run.new_jobs > 0 && ` · ${plural(run.new_jobs, "new job")} so far`}
-          {nearMisses(run.filtered_out) > 0 && ` · ${nearMisses(run.filtered_out)} filtered out`}
+          {nearMissCount(run.filtered_out) > 0 && ` · ${nearMissCount(run.filtered_out)} filtered out`}
         </span>
       </div>
       <div
@@ -449,29 +455,27 @@ function RunSummary({ run, onReview }: { run: Run; onReview: () => void }) {
   const searchErrors = run.errors.filter((e) => e.kind === "search");
   const boardErrors = run.errors.filter((e) => e.kind === "board");
   const scoringErrors = run.errors.filter((e) => e.kind === "scoring");
-  const full = run.kind === "full";
+  const isFullRun = run.kind === "full";
   const changes = [
-    full && run.companies_discovered > 0 && plural(run.companies_discovered, "new company", "new companies"),
-    full && `${plural(run.companies_total, "company", "companies")} checked`,
-    full && (run.new_jobs === 0 ? "no new jobs" : plural(run.new_jobs, "new job")),
+    isFullRun && run.companies_discovered > 0 && plural(run.companies_discovered, "new company", "new companies"),
+    isFullRun && `${plural(run.companies_total, "company", "companies")} checked`,
+    isFullRun && (run.new_jobs === 0 ? "no new jobs" : plural(run.new_jobs, "new job")),
     run.updated_jobs > 0 && `${run.updated_jobs} updated`,
     run.closed_jobs > 0 && `${run.closed_jobs} closed`,
-    (run.scored_jobs > 0 || !full) && `${run.scored_jobs} scored`,
+    (run.scored_jobs > 0 || !isFullRun) && `${run.scored_jobs} scored`,
     run.scored_jobs > 0 && plural(run.matched_jobs, "new match", "new matches"),
     run.ai_cost_usd > 0 && `about ${formatCost(run.ai_cost_usd)} AI cost`,
   ].filter(Boolean);
-  const filteredOut = nearMisses(run.filtered_out);
-  const otherRoles = run.filtered_out.role ?? 0;
-  const byRule = (Object.entries(run.filtered_out) as [FilterRule, number][]).filter(
-    ([rule, count]) => rule !== "role" && count > 0,
-  );
+  const filteredOut = nearMissCount(run.filtered_out);
+  const otherRoles = run.filtered_out.role;
+  const byRule = nearMissCounts(run.filtered_out);
 
   return (
     <>
       <div className="notice notice-success" role="status">
         <CheckIcon />
         <span className="notice-text">
-          {full ? "Run finished" : "Scoring-only run finished"} {when} · {changes.join(" · ")}
+          {isFullRun ? "Run finished" : "Scoring-only run finished"} {when} · {changes.join(" · ")}
         </span>
       </div>
       {filteredOut > 0 && (
@@ -624,8 +628,9 @@ function FilteredEmptyState() {
       </div>
       <h2>Nothing filtered out</h2>
       <p>
-        Jobs whose title matches your roles but that another filter dropped (location, seniority, experience, salary or
-        sponsorship) show up here, each with the reason. Other roles at the same companies aren't listed.
+        Jobs whose title matches your roles but that another filter dropped (an excluded keyword, location, seniority,
+        experience, salary or sponsorship) show up here, each with the reason. Other roles at the same companies aren't
+        listed.
       </p>
     </section>
   );

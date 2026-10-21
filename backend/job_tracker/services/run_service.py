@@ -67,7 +67,7 @@ class RunInputs:
     """Everything a run uses, as it was when the run started."""
 
     search_settings: SearchSettings
-    search_api_key: str
+    search_api_key: str | None  # only scoring-only runs go without
     anthropic_api_key: str
     scoring_model: str
     resume: MasterResume
@@ -122,13 +122,14 @@ class RunService:
             return len(uow.jobs.needing_score(resume.version))
 
     def start(self) -> Run:
-        return self._start("full", self._inputs(scoring_only=False))
+        return self._start("full")
 
     def start_scoring(self) -> Run:
         """Score the jobs that have no score for the current resume, without searching or fetching boards."""
-        return self._start("scoring", self._inputs(scoring_only=True))
+        return self._start("scoring")
 
-    def _start(self, kind: RunKind, inputs: RunInputs) -> Run:
+    def _start(self, kind: RunKind) -> Run:
+        inputs = self._inputs(kind)
         with self._start_lock, self._db.transaction() as uow:
             if uow.runs.any_running():
                 raise RunAlreadyActiveError
@@ -136,12 +137,12 @@ class RunService:
         threading.Thread(target=self._execute, args=(run_id, kind, inputs), daemon=True).start()
         return self.get(run_id)
 
-    def _inputs(self, scoring_only: bool) -> RunInputs:
-        missing = scoring_missing(self._settings, self._resumes) if scoring_only else self.missing()
-        search_api_key = self._settings.search_api_key() or ""
+    def _inputs(self, kind: RunKind) -> RunInputs:
+        missing = self.missing() if kind == "full" else scoring_missing(self._settings, self._resumes)
+        search_api_key = self._settings.search_api_key()
         ai = self._settings.ai()
         resume = self._resumes.master()
-        if missing or (not search_api_key and not scoring_only) or ai.anthropic_api_key is None or resume is None:
+        if missing or (search_api_key is None and kind == "full") or ai.anthropic_api_key is None or resume is None:
             raise SetupIncompleteError(missing)
         return RunInputs(self._settings.search(), search_api_key, ai.anthropic_api_key, ai.scoring_model, resume)
 
@@ -149,6 +150,7 @@ class RunService:
         status: RunStatus = "finished"
         try:
             if kind == "full":
+                assert inputs.search_api_key is not None
                 self._discover(run_id, inputs.search_settings, inputs.search_api_key)
                 self._fetch_all(run_id, inputs.search_settings)
             self._score_all(run_id, inputs)
