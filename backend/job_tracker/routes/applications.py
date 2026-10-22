@@ -43,7 +43,8 @@ def get_application(application_id: int, services: ServicesDep) -> dict[str, Any
 @router.put("/applications/{application_id}/resume")
 def edit_tailored_resume(application_id: int, body: TailoredResumeIn, services: ServicesDep) -> dict[str, Any]:
     """Regenerates the tailored .docx and PDF from my edits."""
-    application = services.applications.edit(application_id, body.summary, body.skills)
+    bullets = {bullet.index: bullet.text for bullet in body.bullets}
+    application = services.applications.edit(application_id, body.summary, body.skills, bullets)
     return application_json(application, services.jobs.get(application.job_id))
 
 

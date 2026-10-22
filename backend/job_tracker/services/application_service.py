@@ -484,9 +484,13 @@ class ApplicationService:
         with self._db.transaction() as uow:
             uow.applications.set_status(application_id, "failed", _now(), message)
 
-    def edit(self, application_id: int, summary: list[str], skills: list[list[str]]) -> Application:
-        """Regenerate the tailored resume from my edits. The master-list rule still applies; a resume that grew
-        past the master's page count is saved, and the review bundle flags it."""
+    def edit(
+        self, application_id: int, summary: list[str], skills: list[list[str]], bullets: dict[int, str] | None = None
+    ) -> Application:
+        """Regenerate the tailored resume from my edits, then re-score it. `bullets` are the bullets I changed (text
+        after the label, by paragraph); they go through the same fact check as the tailor's rewrites. The
+        master-list rule still applies; a resume that grew past the master's page count is saved, and the review
+        bundle flags it."""
         with self._edit_lock:
             application = self.get(application_id)
             resume = application.resume
@@ -497,12 +501,37 @@ class ApplicationService:
             if not summary:
                 raise InvalidRequestError("Write a Summary before regenerating.")
             lines = _edited_lines(resume.master_skills, skills, version.skills or [])
-            pages, text = self._render(version, summary, lines, resume.bullets or [], self._dir / resume.directory)
+            marked = {edit.index for edit in resume.bullets or []}
+            rewrites: dict[int, str] = {}
+            for index, text in (bullets or {}).items():
+                if index not in marked:
+                    raise InvalidRequestError(f"Paragraph {index} isn't one of your experience bullets.")
+                if not text.strip():
+                    raise InvalidRequestError("Write each bullet, or use the original.")
+                rewrites[index] = " ".join(text.split())
+            edits = _checked_bullets(resume.bullets or [], rewrites, version.skills or [], resume.keywords)
+            pages, text = self._render(version, summary, lines, edits, self._dir / resume.directory)
+            job = self._job(application.job_id)
+            score = self._rescore(application_id, job, version, text, lines)
             with self._db.transaction() as uow:
                 uow.applications.update_resume(
-                    application_id, summary, lines, covered(resume.keywords, text), pages, _now()
+                    application_id,
+                    summary,
+                    lines,
+                    None if resume.bullets is None else edits,
+                    covered(resume.keywords, text),
+                    pages,
+                    score,
+                    _now(),
                 )
         return self.get(application_id)
+
+    def _job(self, job_id: int) -> Job:
+        with self._db.transaction() as uow:
+            job = uow.jobs.get(job_id)
+        if job is None:
+            raise NotFoundError("Job not found.")
+        return job
 
     def _render(
         self,

@@ -122,6 +122,91 @@ def test_a_reworded_bullet_that_grew_too_much_is_reverted(
     assert payments["reverted"]["reason"] == "It's 57% longer than the original; a rewrite can grow by 15% at most."
 
 
+MASTER_SKILLS = [["Python", "Go", "TypeScript", "SQL"], ["PostgreSQL", "Docker", "Kubernetes", "AWS (Lambda, S3)"]]
+
+
+def edit(client: TestClient, application: dict[str, Any], bullets: list[tuple[int, str]]) -> Any:
+    """Regenerate with the Summary and Skills as they are and these bullet texts, by paragraph index."""
+    resume = application["resume"]
+    return client.put(
+        f"/api/applications/{application['id']}/resume",
+        json={
+            "summary": resume["summary"]["tailored"],
+            "skills": [line["skills"] for line in resume["skills"]["tailored"]],
+            "bullets": [{"index": index, "text": text} for index, text in bullets],
+        },
+    )
+
+
+def test_a_hand_edit_that_changes_a_number_is_reverted(client: TestClient, boards: FakeJobBoards, llm: FakeLLM) -> None:
+    application = apply(client, bullets_job(client, boards))
+    payments = by_label(application)["Payments"]
+    typo = PAYMENTS.replace("2M+", "3M+")
+
+    response = edit(client, application, [(payments["index"], typo)])
+
+    assert response.status_code == 200, response.text
+    edited = by_label(response.json())["Payments"]
+    assert edited["tailored"] == PAYMENTS
+    assert edited["reverted"] == {"text": typo, "reason": "It changes 2M+ to 3M+."}
+    assert "3M+" not in pdf_text(client.get(response.json()["resume"]["pdf_url"]).content)
+
+
+def test_a_valid_hand_edit_is_regenerated_and_rescored(client: TestClient, boards: FakeJobBoards, llm: FakeLLM) -> None:
+    application = apply(client, bullets_job(client, boards))
+    payments = by_label(application)["Payments"]
+    mine = "Cut payments latency by 60% for 2M+ users by moving ledger services to Go."
+    llm.score_resume(mine, 93)
+
+    response = edit(client, application, [(payments["index"], mine)])
+
+    assert response.status_code == 200, response.text
+    resume = response.json()["resume"]
+    assert (by_label(response.json())["Payments"]["tailored"], resume["fit_score"]["after"]) == (mine, 93)
+    assert f"Payments: {mine}" in pdf_text(client.get(resume["pdf_url"]).content)
+    tailored_docx = client.get(resume["docx_url"]).content
+    paragraph = next(p for p in docx.Document(io.BytesIO(tailored_docx)).paragraphs if p.text.startswith("Payments"))
+    assert [(run.text, run.bold) for run in paragraph.runs if run.text] == [("Payments: ", True), (mine, None)]
+    assert costs_by_kind(client)["rescoring"] == 2
+    assert response.json()["cost_usd"] > application["cost_usd"]
+
+
+def test_use_original_restores_one_bullet_and_keeps_the_others(
+    client: TestClient, boards: FakeJobBoards, llm: FakeLLM
+) -> None:
+    job_id = bullets_job(client, boards)
+    llm.tailor(tailoring((1, REWORDED), (4, API)))
+    application = apply(client, job_id)
+    payments = by_label(application)["Payments"]
+
+    response = edit(client, application, [(payments["index"], payments["master"])])
+
+    bullets = response.json()["resume"]["bullets"]
+    assert [(b["tailored"], b["reverted"]) for b in bullets][::3] == [(PAYMENTS, None), (API, None)]
+    text = pdf_text(client.get(response.json()["resume"]["pdf_url"]).content)
+    assert f"Payments: {PAYMENTS}" in text
+    assert API in text
+
+
+def test_bullet_edits_must_name_a_marked_bullet_and_not_be_blank(
+    client: TestClient, boards: FakeJobBoards, llm: FakeLLM
+) -> None:
+    application = apply(client, bullets_job(client, boards))
+    index = by_label(application)["Payments"]["index"]
+
+    for bullets, message in [
+        ([(index, "  ")], "Write each bullet, or use the original."),
+        ([(0, "Anything")], "Paragraph 0 isn't one of your experience bullets."),
+    ]:
+        response = edit(client, application, bullets)
+        assert response.status_code == 422
+        assert response.json()["detail"] == message
+
+
+def costs_by_kind(client: TestClient) -> dict[str, int]:
+    return {k["kind"]: k["calls"] for k in client.get("/api/settings/costs").json()["by_kind"]}
+
+
 def test_shortening_and_retrying_covers_the_bullets_too(
     client: TestClient, boards: FakeJobBoards, llm: FakeLLM
 ) -> None:

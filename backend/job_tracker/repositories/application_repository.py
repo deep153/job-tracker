@@ -155,20 +155,25 @@ class ApplicationRepository:
         application_id: int,
         summary: list[str],
         skills: list[SkillLine],
+        bullets: list[BulletEdit] | None,
         covered_after: list[bool],
         page_count: int,
+        score_after: int | None,
         now: str,
     ) -> None:
         self._conn.execute(
             """
-            UPDATE resume_versions SET summary = ?, skills = ?, covered_after = ?, page_count = ?
+            UPDATE resume_versions SET summary = ?, skills = ?, bullets = ?, covered_after = ?, page_count = ?,
+                score_after = ?
             WHERE application_id = ?
             """,
             (
                 json.dumps(summary),
                 json.dumps([asdict(line) for line in skills]),
+                _bullets_json(bullets),
                 json.dumps(covered_after),
                 page_count,
+                score_after,
                 application_id,
             ),
         )
