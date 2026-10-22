@@ -125,6 +125,11 @@ def _best_entry(field: FormField, bank: list[BankEntry]) -> BankEntry | None:
     return None if best is None else best[1]
 
 
+def matching_entry(question: str, bank: list[BankEntry]) -> BankEntry | None:
+    """The bank entry that would answer `question` on a form, however either is worded."""
+    return _best_entry(FormField(key="", label=question, kind="text", required=False, options=[]), bank)
+
+
 def draft_answers(fields: list[FormField], bank: list[BankEntry]) -> DraftedAnswers:
     answers = []
     used = set()

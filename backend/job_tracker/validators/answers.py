@@ -13,6 +13,19 @@ class BankEntryIn(BaseModel):
     category: AnswerCategory
 
 
+class ProfileAnswerIn(BaseModel):
+    question: str = Field(max_length=500)
+    category: AnswerCategory
+    answer: AnswerText
+    replace: bool = False
+
+
+class ProfileIn(BaseModel):
+    """My confirmed profile answers; empty ones are skipped."""
+
+    answers: list[ProfileAnswerIn] = Field(max_length=100)
+
+
 class FormAnswersIn(BaseModel):
     """Answers I typed in review, by question key; an empty or null answer clears it."""
 
