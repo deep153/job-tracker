@@ -22,6 +22,7 @@ import {
   type BulletEdit,
   type SkillLine,
   type TailoredResume,
+  type TailoredResumeEdits,
   type TrackedStatus,
 } from "../types/application";
 import { companyName, formatCost, fullDate, timeAgo } from "../utils/format";
@@ -328,13 +329,20 @@ function Failed({ application }: { application: Application }) {
   );
 }
 
-type Draft = { summary: string; skills: string[] };
+/** `bullets` holds each experience bullet's text after its label, by paragraph index. */
+type Draft = { summary: string; skills: string[]; bullets: Record<number, string> };
 
 function draftFrom(resume: TailoredResume): Draft {
   return {
     summary: resume.summary.tailored.join("\n\n"),
     skills: resume.skills.tailored.map((l) => l.skills.join(", ")),
+    bullets: Object.fromEntries((resume.bullets ?? []).map((b) => [b.index, b.tailored])),
   };
+}
+
+/** Bullets the tailor reworded or tried to: the ones the review screen lets me edit. */
+function changedBullets(resume: TailoredResume): BulletEdit[] {
+  return (resume.bullets ?? []).filter((b) => b.tailored !== b.master || b.reverted);
 }
 
 /** Split "Go, AWS (Lambda, S3); SQL" into skills, keeping commas inside brackets. */
@@ -355,10 +363,15 @@ function splitSkills(text: string): string[] {
   return skills.map((s) => s.trim()).filter(Boolean);
 }
 
-function editsFrom(draft: Draft): { summary: string[]; skills: string[][] } {
+/** The edits to send: only the bullets whose text differs from what the resume has now. */
+function editsFrom(draft: Draft, resume: TailoredResume): TailoredResumeEdits {
+  const tailored = draftFrom(resume).bullets;
   return {
     summary: draft.summary.split(/\n\s*\n/),
     skills: draft.skills.map(splitSkills),
+    bullets: Object.entries(draft.bullets)
+      .filter(([index, text]) => text.trim() !== tailored[Number(index)])
+      .map(([index, text]) => ({ index: Number(index), text })),
   };
 }
 
@@ -381,7 +394,7 @@ function InReview({
   const [answersError, setAnswersError] = useState<string | null>(null);
   const [savingToBank, setSavingToBank] = useState<string | null>(null);
   const [approveError, setApproveError] = useState<string | null>(null);
-  const dirty = JSON.stringify(editsFrom(draft)) !== JSON.stringify(editsFrom(draftFrom(resume)));
+  const dirty = JSON.stringify(editsFrom(draft, resume)) !== JSON.stringify(editsFrom(draftFrom(resume), resume));
   const changed = changedAnswers(questions, answers);
   const answersDirty = Object.keys(changed).length > 0;
   const letterDirty = application.cover_letter !== null && letter.trim() !== application.cover_letter.text;
@@ -390,7 +403,7 @@ function InReview({
     setBusy(then ? "save" : "regenerate");
     setError(null);
     try {
-      const saved = await editTailoredResume(application.id, editsFrom(draft));
+      const saved = await editTailoredResume(application.id, editsFrom(draft, resume));
       onSaved(saved);
       if (saved.resume) setDraft(draftFrom(saved.resume));
       then?.();
@@ -535,7 +548,7 @@ function InReview({
           <AlertIcon />
           <span className="notice-text">
             The tailored resume runs to {pages(resume.page_count)}, longer than your {resume.master_page_count}-page
-            master. Shorten the Summary or drop some skills, then regenerate.
+            master. Shorten the Summary or a bullet, or drop some skills, then regenerate.
           </span>
         </div>
       )}
@@ -615,6 +628,37 @@ function InReview({
               <p className="field-hint">
                 Most relevant skills first, separated by commas. Only skills in your master skills list can be used.
               </p>
+              {changedBullets(resume).map((b) => (
+                <div className="field" key={b.index}>
+                  <label className="field-label" htmlFor={`bullet-${b.index}`}>
+                    {b.label ? `${b.label}:` : "Experience bullet"}
+                  </label>
+                  <textarea
+                    id={`bullet-${b.index}`}
+                    className="text-input review-bullet-input"
+                    rows={2}
+                    value={draft.bullets[b.index]}
+                    onChange={(e) => setDraft({ ...draft, bullets: { ...draft.bullets, [b.index]: e.target.value } })}
+                  />
+                  <div className="review-bullet-actions">
+                    <span className="field-hint">Original: {b.master}</span>
+                    <button
+                      type="button"
+                      className="button button-ghost button-tiny"
+                      onClick={() => setDraft({ ...draft, bullets: { ...draft.bullets, [b.index]: b.master } })}
+                      disabled={draft.bullets[b.index] === b.master}
+                    >
+                      Use original
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {changedBullets(resume).length > 0 && (
+                <p className="field-hint">
+                  Bullets keep their label, every number and their length (15% longer at most), and can only name skills
+                  from the original bullet or your master list; anything else goes back to the original.
+                </p>
+              )}
               {error && (
                 <div className="notice notice-error" role="alert">
                   <AlertIcon />

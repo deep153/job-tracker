@@ -2151,6 +2151,19 @@ mark.diff-removed,
   font-weight: 600;
 }
 
+.review-bullet-input {
+  padding: 8px 10px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.review-bullet-actions {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
 .bullet-diffs {
   margin: 0;
   padding: 0;

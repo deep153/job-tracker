@@ -1,4 +1,4 @@
-import type { Application, ApplicationSummary, TrackedStatus } from "../types/application";
+import type { Application, ApplicationSummary, TailoredResumeEdits, TrackedStatus } from "../types/application";
 import { request, sendJson } from "./client";
 
 /** Every application, newest first. */
@@ -13,8 +13,8 @@ export const applyToJob = (jobId: number) => request<Application>(`/api/jobs/${j
 
 export const getApplication = (id: number) => request<Application>(`/api/applications/${id}`);
 
-/** Regenerates the tailored .docx and PDF from my edits. */
-export const editTailoredResume = (id: number, edits: { summary: string[]; skills: string[][] }) =>
+/** Regenerates the tailored .docx and PDF from my edits, then re-scores it. */
+export const editTailoredResume = (id: number, edits: TailoredResumeEdits) =>
   request<Application>(`/api/applications/${id}/resume`, sendJson("PUT", edits));
 
 export const editCoverLetter = (id: number, text: string) =>

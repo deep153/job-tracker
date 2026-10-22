@@ -44,6 +44,13 @@ export type BulletEdit = {
   reverted: { text: string; reason: string } | null;
 };
 
+/** My edits in review; `bullets` lists only the bullets I changed (text after the label, by paragraph index). */
+export type TailoredResumeEdits = {
+  summary: string[];
+  skills: string[][];
+  bullets: { index: number; text: string }[];
+};
+
 export type TailoredResume = {
   master_version: number;
   summary: { master: string[]; tailored: string[] };
