@@ -1,19 +1,19 @@
-"""The Resume Tailor: a new Summary and reordered Skills for one job, using only skills from my master list, and
-the job's keywords it couldn't cover."""
+"""The Resume Tailor: a new Summary, reordered Skills and reworded experience bullets for one job, using only
+skills from my master list, and the job's keywords it couldn't cover."""
 
 from dataclasses import dataclass, field
 from typing import Any, TypeGuard
 
 from job_tracker.clients.claude import LLM, LLMError
 from job_tracker.models.job import Job
-from job_tracker.models.resume import SkillLine
+from job_tracker.models.resume import Bullet, SkillLine
 from job_tracker.services.fit_scorer import job_text
 
 MAX_KEYWORDS = 20
 MAX_OUTPUT_TOKENS = 2_000
 
-SYSTEM_PROMPT = """You tailor one job seeker's resume to a job posting by editing only two parts of it: the \
-Summary and the order of the Skills.
+SYSTEM_PROMPT = """You tailor one job seeker's resume to a job posting by editing only three parts of it: the \
+Summary, the order of the Skills, and the wording of the experience bullets.
 
 Rules:
 - Never invent experience, employers, job titles, dates, metrics, education or skills. Use only facts the \
@@ -23,6 +23,11 @@ resume backs it up. Keep it about as long as the current Summary, and give one t
 - For each Skills line, list its skills with the most relevant to the posting first. Use only skills from \
 the allowed skills list, spelled as they are there. You may add an allowed skill the posting asks for to the \
 line it fits best, or leave out a skill that doesn't matter for this job.
+- You may reword an experience bullet's text toward the posting's wording, where the bullet already backs it \
+up. Give only the text after the bullet's label (the label stays as it is), keep every number exactly as \
+written (percentages, counts, "9+"), name no skill or tool the bullet doesn't already show unless it's on the \
+allowed skills list, and stay within about 10% of the original length. Leaving a bullet unchanged is fine; \
+list only the bullets you changed.
 - Keywords are the posting's most important skills, tools and qualifications (at most 20), in its wording, \
 a few words each, most important first. When target keywords are given, aim the Summary and Skills at those \
 instead.
@@ -49,6 +54,19 @@ SCHEMA: dict[str, Any] = {
                 "additionalProperties": False,
             },
         },
+        "bullets": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "bullet": {"type": "integer", "description": "The experience bullet's number."},
+                    "text": {"type": "string", "description": "Its new text after the label."},
+                },
+                "required": ["bullet", "text"],
+                "additionalProperties": False,
+            },
+            "description": "Only the experience bullets you reworded.",
+        },
         "keywords": {"type": "array", "items": {"type": "string"}},
         "gaps": {
             "type": "array",
@@ -56,7 +74,7 @@ SCHEMA: dict[str, Any] = {
             "description": "Keywords the resume can't honestly show.",
         },
     },
-    "required": ["summary", "skills", "keywords", "gaps"],
+    "required": ["summary", "skills", "bullets", "keywords", "gaps"],
     "additionalProperties": False,
 }
 
@@ -71,6 +89,7 @@ class TailorRequest:
     allowed_skills: list[str]
     job: Job
     target_keywords: list[str] = field(default_factory=list)  # the Fit Scorer's; empty lets the tailor pick
+    bullets: list[Bullet] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -80,12 +99,14 @@ class Shorten:
     pages: int
     master_pages: int
     summary: list[str]
+    bullets: dict[int, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
 class TailorResult:
     summary: list[str]
     skills: list[SkillLine]  # one per line of the request, in the same order
+    bullets: dict[int, str]  # reworded text after the label, by position in the request's bullets; not yet checked
     keywords: list[str]  # the target keywords, or the tailor's own when there were none
     gaps: list[str]  # of the keywords, in their spelling
     model: str
@@ -107,17 +128,30 @@ def build_prompt(request: TailorRequest, shorten: Shorten | None) -> str:
         f"<allowed_skills>\n{', '.join(request.allowed_skills)}\n</allowed_skills>",
         f"<job>\n{job_text(request.job)}\n</job>",
     ]
+    if request.bullets:
+        bullets = "\n".join(
+            f"Bullet {n}{f' (label “{b.label}”)' if b.label else ''}: {b.text}"
+            for n, b in enumerate(request.bullets, 1)
+        )
+        parts.append(f"<experience_bullets>\n{bullets}\n</experience_bullets>")
     if request.target_keywords:
         parts.append(f"<target_keywords>\n{', '.join(request.target_keywords)}\n</target_keywords>")
     if shorten is None:
-        parts.append("Tailor my Summary and Skills to this job.")
+        parts.append(f"Tailor my Summary, Skills{' and bullets' if request.bullets else ''} to this job.")
     else:
         previous = sum(len(text.split()) for text in shorten.summary)
-        parts.append(
+        ask = (
             f"Your last Summary ({previous} words) made my resume run to {shorten.pages} pages instead of "
             f"{shorten.master_pages}. Tailor it again with a shorter Summary: at most {words} words, fewer if you "
             "can, and no more skills on a line than it has now."
         )
+        if shorten.bullets:
+            reworded = "\n".join(f"Bullet {n + 1}: {text}" for n, text in sorted(shorten.bullets.items()))
+            ask += (
+                f" Your reworded bullets were:\n{reworded}\nKeep any you reword no longer than the original "
+                "bullet, shorter if you can."
+            )
+        parts.append(ask)
     return "\n\n".join(parts)
 
 
@@ -139,9 +173,19 @@ class ResumeTailor:
         )
         data = response.data
         summary, skills, keywords = data.get("summary"), data.get("skills"), data.get("keywords")
-        gaps = data.get("gaps", [])
+        gaps, bullets = data.get("gaps", []), data.get("bullets", [])
         if not _strings(summary) or not _strings(keywords) or not _strings(gaps) or not isinstance(skills, list):
             raise LLMError(_INVALID)
+        if not isinstance(bullets, list):
+            raise LLMError(_INVALID)
+        reworded: dict[int, str] = {}
+        for item in bullets:
+            number = item.get("bullet") if isinstance(item, dict) else None
+            if not isinstance(number, int) or isinstance(number, bool) or not isinstance(item.get("text"), str):
+                raise LLMError(_INVALID)
+            text = " ".join(item["text"].split())
+            if 0 < number <= len(request.bullets) and text:
+                reworded[number - 1] = text
         summary = [" ".join(text.split()) for text in summary if text.strip()]
         if not summary:
             raise LLMError(_INVALID)
@@ -156,6 +200,7 @@ class ResumeTailor:
         return TailorResult(
             summary=summary,
             skills=allowed_lines(request.skills, chosen, request.allowed_skills),
+            bullets=reworded,
             keywords=targets,
             gaps=[spelling[_key(gap)] for gap in _tidy(gaps) if _key(gap) in spelling],
             model=response.model,

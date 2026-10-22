@@ -10,7 +10,7 @@ from docx.document import Document
 from docx.styles.style import ParagraphStyle
 from docx.text.paragraph import Paragraph
 
-from job_tracker.models.resume import ParagraphInfo, SkillLine
+from job_tracker.models.resume import Bullet, ParagraphInfo, SkillLine
 from job_tracker.services.errors import InvalidRequestError, TooLargeError
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
@@ -127,6 +127,14 @@ def skill_line(text: str) -> SkillLine | None:
     for item in _split_top_level(text):
         add_skill(skills, item)
     return SkillLine(label, skills) if skills else None
+
+
+def bullet(index: int, text: str) -> Bullet:
+    """An experience bullet's label (the text before its first colon, as for Skills lines) and the text after it;
+    a bullet without one is reworded whole."""
+    if match := _LABEL.match(text.strip()):
+        return Bullet(index, match[1].strip(), match[2])
+    return Bullet(index, None, text.strip())
 
 
 def separator(text: str) -> str:

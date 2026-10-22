@@ -1,4 +1,4 @@
-"""The Resume Renderer: writes tailored Summary and Skills text into a copy of the master .docx.
+"""The Resume Renderer: writes tailored Summary, Skills and bullet text into a copy of the master .docx.
 
 Only the mapped paragraphs change, and their text is replaced inside the runs they already have, so each
 paragraph keeps its fonts and styles (a bold "Languages:" label stays bold, the skills after it stay plain).
@@ -10,7 +10,7 @@ import docx
 from docx.text.paragraph import Paragraph
 from docx.text.run import Run
 
-from job_tracker.models.resume import SkillLine
+from job_tracker.models.resume import Bullet, SkillLine
 from job_tracker.services.resume_reader import body_paragraphs, separator
 
 # Runs that hold text, including those inside links, tracked insertions and smart tags.
@@ -23,11 +23,13 @@ def render(
     summary_paragraphs: list[int],
     summary: list[str],
     skills: dict[int, SkillLine],
+    bullets: list[Bullet] | None = None,
 ) -> tuple[bytes, str]:
     """The tailored .docx, and its text.
 
     `summary` has one text per Summary paragraph; extra texts join the last paragraph, and Summary paragraphs
     left without text are removed. `skills` maps a Skills paragraph's index to the line it should now list.
+    `bullets` are reworded experience bullets: each one's text after its label replaces the paragraph's.
     """
     document = docx.Document(io.BytesIO(master))
     paragraphs = list(body_paragraphs(document))
@@ -43,6 +45,9 @@ def render(
         raw = _raw_text(paragraph)
         keep = _label_end(raw) if line.label else 0
         _replace(paragraph, keep, separator(raw[keep:]).join(line.skills))
+    for bullet in bullets or []:
+        paragraph = paragraphs[bullet.index]
+        _replace(paragraph, _label_end(_raw_text(paragraph)) if bullet.label else 0, bullet.text)
     out = io.BytesIO()
     document.save(out)
     text = "\n".join(p.text for p in body_paragraphs(document))

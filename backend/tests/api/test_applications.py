@@ -124,6 +124,7 @@ def test_a_resume_marked_without_experience_bullets_still_tailors(
     application = apply(client, job_id)
 
     assert application["status"] == "in_review", application
+    assert application["resume"]["bullets"] == []
     text = pdf_text(client.get(f"/api/applications/{application['id']}/resume.pdf").content)
     assert TAILORED in text
     for bullet in BULLETS:

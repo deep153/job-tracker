@@ -2,11 +2,10 @@
 
 import logging
 import os
-import re
 import shutil
 import threading
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -22,18 +21,22 @@ from job_tracker.models.application import (
     SENT_STATUSES,
     Application,
     ApplicationStatus,
+    BulletEdit,
+    RevertedBullet,
     TailoredResume,
 )
 from job_tracker.models.job import Job
 from job_tracker.models.platform import PLATFORM_NAMES, Platform
-from job_tracker.models.resume import MasterResume, ResumeVersion, SkillLine
+from job_tracker.models.resume import Bullet, MasterResume, ResumeVersion, SkillLine
+from job_tracker.services import bullet_guard
 from job_tracker.services.answer_engine import draft_answers, exact_choice, open_ended
 from job_tracker.services.answer_writer import AnswerWriter
 from job_tracker.services.cover_letter_writer import CoverLetterWriter, as_docx, tidy
 from job_tracker.services.errors import ConflictError, InvalidRequestError, NotFoundError, SetupIncompleteError
 from job_tracker.services.fit_scorer import FitScorer
+from job_tracker.services.keywords import covered
 from job_tracker.services.pricing import estimate_cost
-from job_tracker.services.resume_reader import skill_line
+from job_tracker.services.resume_reader import bullet, skill_line
 from job_tracker.services.resume_renderer import render
 from job_tracker.services.resume_service import MASTER_DOCX, ResumeService
 from job_tracker.services.resume_tailor import ResumeTailor, Shorten, TailorRequest
@@ -63,24 +66,6 @@ class TailoringError(Exception):
 
 def _now() -> str:
     return datetime.now(UTC).isoformat()
-
-
-def _terms(text: str) -> list[str]:
-    """Lower-cased words without punctuation, plurals folded ("APIs" is "api")."""
-    words = re.findall(r"[\w+#]+", text.casefold())
-    return [w[:-1] if len(w) > 3 and w.endswith("s") and not w.endswith("ss") else w for w in words]
-
-
-def covered(keywords: list[str], text: str) -> list[bool]:
-    """Which keywords the text mentions, as whole words, ignoring case, punctuation and plurals. A keyword with a
-    parenthetical ("AWS (Lambda)") counts as the term before it."""
-    terms = _terms(text)
-    result = []
-    for keyword in keywords:
-        wanted = _terms(keyword.split("(")[0]) or _terms(keyword)
-        n = len(wanted)
-        result.append(bool(wanted) and any(terms[i : i + n] == wanted for i in range(len(terms) - n + 1)))
-    return result
 
 
 @dataclass(frozen=True)
@@ -120,6 +105,28 @@ def _target_keywords(job: Job) -> list[str]:
         if keyword.casefold() not in {k.casefold() for k in keywords}:
             keywords.append(keyword)
     return keywords
+
+
+def _bullets(version: ResumeVersion) -> list[Bullet]:
+    """The marked experience bullets, in order."""
+    return [bullet(index, version.paragraphs[index].text) for index in version.bullet_paragraphs or []]
+
+
+def _checked_bullets(
+    bullets: list[BulletEdit], rewrites: dict[int, str], allowed_skills: list[str], keywords: list[str]
+) -> list[BulletEdit]:
+    """The bullets with `rewrites` (new text after the label, by paragraph) applied, except those the fact check
+    turns down: those go back to the master's text and record the rewrite and why."""
+    result = []
+    for edit in bullets:
+        rewrite = rewrites.get(edit.index)
+        if rewrite is None or rewrite == edit.tailored:
+            result.append(edit)
+        elif reason := bullet_guard.problem(edit.master, rewrite, allowed_skills, keywords):
+            result.append(replace(edit, tailored=edit.master, reverted=RevertedBullet(rewrite, reason)))
+        else:
+            result.append(replace(edit, tailored=rewrite, reverted=None))
+    return result
 
 
 def _lines(version: ResumeVersion) -> dict[int, SkillLine]:
@@ -490,7 +497,7 @@ class ApplicationService:
             if not summary:
                 raise InvalidRequestError("Write a Summary before regenerating.")
             lines = _edited_lines(resume.master_skills, skills, version.skills or [])
-            pages, text = self._render(version, summary, lines, self._dir / resume.directory)
+            pages, text = self._render(version, summary, lines, resume.bullets or [], self._dir / resume.directory)
             with self._db.transaction() as uow:
                 uow.applications.update_resume(
                     application_id, summary, lines, covered(resume.keywords, text), pages, _now()
@@ -498,7 +505,12 @@ class ApplicationService:
         return self.get(application_id)
 
     def _render(
-        self, version: ResumeVersion, summary: list[str], skills: list[SkillLine], target: Path
+        self,
+        version: ResumeVersion,
+        summary: list[str],
+        skills: list[SkillLine],
+        bullets: list[BulletEdit],
+        target: Path,
     ) -> tuple[int, str]:
         """Write the tailored .docx and PDF into `target`; returns the PDF's page count and the resume's text.
 
@@ -506,8 +518,9 @@ class ApplicationService:
         """
         assert version.summary_paragraphs is not None
         master = self._resumes.file(version.version, MASTER_DOCX).read_bytes()
+        reworded = [Bullet(b.index, b.label, b.tailored) for b in bullets if b.tailored != b.master]
         tailored, text = render(
-            master, version.summary_paragraphs, summary, dict(zip(_lines(version), skills, strict=True))
+            master, version.summary_paragraphs, summary, dict(zip(_lines(version), skills, strict=True)), reworded
         )
         draft = target / f"{uuid.uuid4().hex}.docx"
         draft.write_bytes(tailored)
@@ -535,6 +548,7 @@ class ApplicationService:
             allowed_skills=version.skills,
             job=job,
             target_keywords=_target_keywords(job),
+            bullets=_bullets(version),
         )
         target = self._dir / directory
         target.mkdir(parents=True)
@@ -545,10 +559,16 @@ class ApplicationService:
             self._record_usage(
                 "tailoring", application_id, job.id, result.model, result.input_tokens, result.output_tokens
             )
-            pages, text = self._render(version, result.summary, result.skills, target)
+            bullets = _checked_bullets(
+                [BulletEdit(b.index, b.label, b.text, b.text) for b in request.bullets],
+                {request.bullets[n].index: text for n, text in result.bullets.items()},
+                version.skills,
+                result.keywords,
+            )
+            pages, text = self._render(version, result.summary, result.skills, bullets, target)
             if pages <= version.page_count:
                 break
-            shorten = Shorten(pages, version.page_count, result.summary)
+            shorten = Shorten(pages, version.page_count, result.summary, result.bullets)
         else:
             assert shorten is not None
             raise TailoringError(
@@ -571,6 +591,7 @@ class ApplicationService:
             gaps=result.gaps,
             score_before=job.score.score if job.score is not None else None,
             score_after=self._rescore(application_id, job, version, text, result.skills),
+            bullets=bullets,
         )
 
     def _rescore(

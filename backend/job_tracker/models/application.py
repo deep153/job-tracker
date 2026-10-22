@@ -31,6 +31,26 @@ class ApplicationRef:
 
 
 @dataclass(frozen=True)
+class RevertedBullet:
+    """A rewrite of a bullet that the fact check turned down, and why."""
+
+    text: str
+    reason: str
+
+
+@dataclass(frozen=True)
+class BulletEdit:
+    """One experience bullet of a tailored resume: the master's text after its label, the text in use, and the
+    last rewrite the fact check turned down, if any."""
+
+    index: int  # the paragraph
+    label: str | None
+    master: str
+    tailored: str
+    reverted: RevertedBullet | None = None
+
+
+@dataclass(frozen=True)
 class TailoredResume:
     """The resume version tailored for one application: the edits next to the master's text, and its files."""
 
@@ -49,6 +69,7 @@ class TailoredResume:
     gaps: list[str] | None = None
     score_before: int | None = None  # the job's fit score when it was tailored
     score_after: int | None = None  # the Fit Scorer's score for the tailored resume, unless that call failed
+    bullets: list[BulletEdit] | None = None  # None on versions tailored before bullets could be reworded
 
 
 @dataclass(frozen=True)

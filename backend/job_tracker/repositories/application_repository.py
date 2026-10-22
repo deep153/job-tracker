@@ -8,6 +8,8 @@ from job_tracker.models.application import (
     SENT_STATUSES,
     Application,
     ApplicationStatus,
+    BulletEdit,
+    RevertedBullet,
     TailoredResume,
 )
 from job_tracker.models.resume import SkillLine
@@ -17,7 +19,7 @@ _WITH_RESUME = """
         resume_versions.master_summary, resume_versions.summary, resume_versions.master_skills,
         resume_versions.skills, resume_versions.keywords, resume_versions.covered_before,
         resume_versions.covered_after, resume_versions.page_count, resume_versions.master_page_count,
-        resume_versions.gaps, resume_versions.score_before, resume_versions.score_after
+        resume_versions.gaps, resume_versions.score_before, resume_versions.score_after, resume_versions.bullets
     FROM applications
     LEFT JOIN resume_versions ON resume_versions.application_id = applications.id
 """
@@ -123,8 +125,8 @@ class ApplicationRepository:
             """
             INSERT OR REPLACE INTO resume_versions (application_id, job_id, master_version, directory,
                 master_summary, summary, master_skills, skills, keywords, covered_before, covered_after,
-                page_count, master_page_count, created_at, gaps, score_before, score_after)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                page_count, master_page_count, created_at, gaps, score_before, score_after, bullets)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 application_id,
@@ -144,6 +146,7 @@ class ApplicationRepository:
                 None if resume.gaps is None else json.dumps(resume.gaps),
                 resume.score_before,
                 resume.score_after,
+                _bullets_json(resume.bullets),
             ),
         )
 
@@ -200,6 +203,17 @@ def _lines(value: str) -> list[SkillLine]:
     return [SkillLine(**line) for line in json.loads(value)]
 
 
+def _bullets_json(bullets: list[BulletEdit] | None) -> str | None:
+    return None if bullets is None else json.dumps([asdict(bullet) for bullet in bullets])
+
+
+def _bullets(value: str) -> list[BulletEdit]:
+    return [
+        BulletEdit(**{**bullet, "reverted": RevertedBullet(**bullet["reverted"]) if bullet["reverted"] else None})
+        for bullet in json.loads(value)
+    ]
+
+
 def _application(row: sqlite3.Row) -> Application:
     resume = None
     if row["directory"] is not None:
@@ -218,6 +232,7 @@ def _application(row: sqlite3.Row) -> Application:
             gaps=None if row["gaps"] is None else json.loads(row["gaps"]),
             score_before=row["score_before"],
             score_after=row["score_after"],
+            bullets=None if row["bullets"] is None else _bullets(row["bullets"]),
         )
     return Application(
         id=row["id"],

@@ -58,6 +58,15 @@ class SkillLine:
 
 
 @dataclass(frozen=True)
+class Bullet:
+    """One experience bullet: its paragraph, an optional label ("Payments", kept as is) and the text after it."""
+
+    index: int
+    label: str | None
+    text: str
+
+
+@dataclass(frozen=True)
 class MasterResume:
     """The current resume version as the AI sees it."""
 

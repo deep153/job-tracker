@@ -158,7 +158,8 @@ CREATE TABLE IF NOT EXISTS resume_versions (
     created_at TEXT NOT NULL,
     gaps TEXT,
     score_before INTEGER,
-    score_after INTEGER
+    score_after INTEGER,
+    bullets TEXT
 );
 """
 
@@ -210,7 +211,7 @@ _ADDED_COLUMNS = {
         "cover_letter": "TEXT",
     },
     "resume_master": {"bullet_paragraphs": "TEXT"},
-    "resume_versions": {"gaps": "TEXT", "score_before": "INTEGER", "score_after": "INTEGER"},
+    "resume_versions": {"gaps": "TEXT", "score_before": "INTEGER", "score_after": "INTEGER", "bullets": "TEXT"},
 }
 
 
