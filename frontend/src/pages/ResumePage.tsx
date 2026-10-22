@@ -1,6 +1,7 @@
 import { useEffect, useState, type DragEvent } from "react";
 import { getResume, listResumeVersions, saveResumeMapping, saveResumeSkills, uploadResume } from "../api/resume";
 import { Field } from "../components/form/Field";
+import { ProfilePanel } from "../components/ProfilePanel";
 import { TermInput } from "../components/form/TermInput";
 import { AlertIcon, CheckIcon, DownloadIcon, ExternalIcon, FileIcon, UploadIcon } from "../components/icons";
 import { Topbar } from "../components/Topbar";
@@ -53,6 +54,7 @@ export function ResumePage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   async function load() {
     setLoadError(null);
@@ -124,10 +126,18 @@ export function ResumePage() {
         ) : (
           <>
             <ResumeFile resume={resume} uploading={uploading} onFile={upload} />
-            <ReadyNotice resume={resume} />
+            <ReadyNotice resume={resume} onProfile={profileOpen ? undefined : () => setProfileOpen(true)} />
+            {profileOpen && <ProfilePanel key={resume.version} onClose={() => setProfileOpen(false)} />}
             <div className="resume-layout">
               <div className="resume-main">
-                <MappingEditor key={resume.version} resume={resume} onSaved={update} />
+                <MappingEditor
+                  key={resume.version}
+                  resume={resume}
+                  onSaved={(next) => {
+                    update(next);
+                    if (!resume.mapping) setProfileOpen(true);
+                  }}
+                />
                 <SkillsEditor key={`skills-${resume.version}`} resume={resume} onSaved={update} />
                 <VersionList versions={versions} current={resume.version} />
               </div>
@@ -240,7 +250,7 @@ function ResumeFile({
   );
 }
 
-function ReadyNotice({ resume }: { resume: Resume }) {
+function ReadyNotice({ resume, onProfile }: { resume: Resume; onProfile?: () => void }) {
   if (resume.ready) {
     return (
       <div className="notice notice-success" role="status">
@@ -252,6 +262,11 @@ function ReadyNotice({ resume }: { resume: Resume }) {
             `, ${resume.mapping!.bullets.length} experience ${resume.mapping!.bullets.length === 1 ? "bullet" : "bullets"}`}
           , {resume.skills!.length} skills in your master list.
         </span>
+        {onProfile && (
+          <button type="button" className="button button-ghost" onClick={onProfile}>
+            Update profile from resume
+          </button>
+        )}
       </div>
     );
   }

@@ -13,15 +13,15 @@ Nothing is saved without confirmation. I can reopen the form later with "Update 
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The extract endpoint returns a proposal with, per field: question, category, extracted value and current bank value
-- [ ] Email, phone and URLs are found in paragraph text and in hyperlink targets; URLs are sorted into LinkedIn, GitHub and website
-- [ ] The standard-questions section is included, with sponsorship prefilled from search settings
-- [ ] The apply endpoint creates new entries, updates existing ones only when replace was chosen, and skips fields left empty
-- [ ] The answer bank's duplicate-question rule still holds
-- [ ] The Resume page opens the review form after the markings are saved, and offers "Update profile from resume" later
-- [ ] Test fixture: a resume whose LinkedIn URL exists only as a hyperlink target
-- [ ] Test: the proposal includes the hyperlinked LinkedIn URL, the email and the phone
-- [ ] Test: after applying, a new application's Greenhouse form fixture shows Email and LinkedIn Profile answered from the bank
-- [ ] Test: an existing differing Phone entry is kept unless replacement was chosen
+- [x] The extract endpoint returns a proposal with, per field: question, category, extracted value and current bank value
+- [x] Email, phone and URLs are found in paragraph text and in hyperlink targets; URLs are sorted into LinkedIn, GitHub and website
+- [x] The standard-questions section is included, with sponsorship prefilled from search settings
+- [x] The apply endpoint creates new entries, updates existing ones only when replace was chosen, and skips fields left empty
+- [x] The answer bank's duplicate-question rule still holds
+- [x] The Resume page opens the review form after the markings are saved, and offers "Update profile from resume" later
+- [x] Test fixture: a resume whose LinkedIn URL exists only as a hyperlink target
+- [x] Test: the proposal includes the hyperlinked LinkedIn URL, the email and the phone
+- [x] Test: after applying, a new application's Greenhouse form fixture shows Email and LinkedIn Profile answered from the bank
+- [x] Test: an existing differing Phone entry is kept unless replacement was chosen

@@ -1321,6 +1321,38 @@ select.text-input {
   height: 220px;
 }
 
+.profile-panel {
+  margin-bottom: 16px;
+}
+
+.profile-skeleton {
+  height: 160px;
+}
+
+.profile-section {
+  display: grid;
+  gap: 12px;
+  margin: 0 0 16px;
+  padding: 0;
+  border: 0;
+}
+
+.profile-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) 2fr;
+  gap: 4px 12px;
+  align-items: center;
+}
+
+.profile-choice {
+  display: flex;
+  grid-column: 2;
+  gap: 6px;
+  align-items: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
 .dropzone {
   transition:
     border-color 120ms,
