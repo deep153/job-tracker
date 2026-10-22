@@ -4,7 +4,11 @@ from typing import Any
 import docx
 import httpx2
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_BREAK
+from docx.opc.constants import RELATIONSHIP_TYPE as RT
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 from docx.shared import Pt
+from docx.text.paragraph import Paragraph
 from fastapi.testclient import TestClient
 
 DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -56,6 +60,69 @@ def sample_resume(summary: str = SUMMARY, pages: int = 1, bold_labels: bool = Fa
     return buffer.getvalue()
 
 
+LINKEDIN_URL = "https://www.linkedin.com/in/jordan-rivera-42"
+EMAIL = "jordan.rivera@example.com"
+PHONE = "(555) 123-4567"
+BULLETS = [
+    "Payments: Cut checkout latency by 60% for 2M+ users by moving the ledger service to Go.",
+    "Reliability: Led on-call for 9+ services and reduced incidents by 35% with Grafana alerts.",
+    "Migration: Moved 120 batch jobs from cron to Kubernetes with zero downtime.",
+    "Built an internal API used by 14 teams to reconcile card settlements daily.",
+]
+PUBLICATION = "Rivera, J. Scaling double-entry ledgers. Payments Engineering Journal, 2019."
+
+
+def _hyperlink(paragraph: Paragraph, text: str, url: str) -> None:
+    r_id = paragraph.part.relate_to(url, RT.HYPERLINK, is_external=True)
+    link = OxmlElement("w:hyperlink")
+    link.set(qn("r:id"), r_id)
+    run = OxmlElement("w:r")
+    text_element = OxmlElement("w:t")
+    text_element.text = text
+    run.append(text_element)
+    link.append(run)
+    paragraph._p.append(link)
+
+
+def full_resume() -> bytes:
+    """A resume shaped like a real one: an all-caps name, a contact line whose LinkedIn URL exists only as a
+    hyperlink target, Skills lines with bold labels, list-item experience bullets with bold labels and numbers
+    (one without a label), two degrees, and publications that aren't list items."""
+    document = docx.Document()
+    document.add_heading("JORDAN RIVERA", level=0)
+    contact = document.add_paragraph(f"Brooklyn, NY | {PHONE} | {EMAIL} | ")
+    _hyperlink(contact, "LinkedIn", LINKEDIN_URL)
+    contact.add_run(" | github.com/jrivera")
+    contact.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    document.add_heading("Summary", level=1)
+    document.add_paragraph(SUMMARY)
+    document.add_heading("Skills", level=1)
+    for line in SKILL_LINES:
+        label, items = line.split(": ", 1)
+        paragraph = document.add_paragraph()
+        paragraph.add_run(f"{label}: ").bold = True
+        paragraph.add_run(items)
+    document.add_paragraph()
+    document.add_heading("Experience", level=1)
+    document.add_paragraph().add_run("Senior Software Engineer, Initech | 2021 – Present").bold = True
+    for bullet in BULLETS:
+        paragraph = document.add_paragraph(style="List Bullet")
+        if ": " in bullet:
+            label, rest = bullet.split(": ", 1)
+            paragraph.add_run(f"{label}: ").bold = True
+            paragraph.add_run(rest)
+        else:
+            paragraph.add_run(bullet)
+    document.add_heading("Education", level=1)
+    document.add_paragraph("Master of Science in Computer Science, Columbia University | May 2020")
+    document.add_paragraph("B.Tech. in Computer Engineering, University of Mumbai | June 2017")
+    document.add_heading("Publications", level=1)
+    document.add_paragraph(PUBLICATION)
+    buffer = io.BytesIO()
+    document.save(buffer)
+    return buffer.getvalue()
+
+
 def upload(client: TestClient, data: bytes, filename: str = "Jordan Rivera.docx") -> httpx2.Response:
     response: httpx2.Response = client.post("/api/resume", files={"file": (filename, data, DOCX_TYPE)})
     return response
@@ -66,8 +133,12 @@ def index_of(resume: dict[str, Any], text: str) -> int:
 
 
 def mapping_for(resume: dict[str, Any], summary: str = SUMMARY) -> dict[str, list[int]]:
-    """The sample resume's Summary paragraph and its two skill lines."""
-    return {"summary": [index_of(resume, summary)], "skills": [index_of(resume, line) for line in SKILL_LINES]}
+    """The sample resume's Summary paragraph and its two skill lines, with no experience bullets."""
+    return {
+        "summary": [index_of(resume, summary)],
+        "skills": [index_of(resume, line) for line in SKILL_LINES],
+        "bullets": [],
+    }
 
 
 def add_ready_resume(client: TestClient, summary: str = SUMMARY, bold_labels: bool = False) -> dict[str, Any]:

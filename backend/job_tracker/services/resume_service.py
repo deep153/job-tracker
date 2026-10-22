@@ -78,9 +78,9 @@ class ResumeService:
         text = "\n".join(p.text for p in resume.paragraphs if p.text)
         return MasterResume(resume.version, text, resume.skills)
 
-    def save_mapping(self, summary: list[int], skills: list[int]) -> ResumeVersion:
+    def save_mapping(self, summary: list[int], skills: list[int], bullets: list[int] | None = None) -> ResumeVersion:
         resume = self._current()
-        summary, skills = sorted(set(summary)), sorted(set(skills))
+        summary, skills, bullets = sorted(set(summary)), sorted(set(skills)), sorted(set(bullets or []))
         if not summary:
             raise InvalidRequestError("Mark at least one paragraph as your Summary.")
         if not skills:
@@ -92,6 +92,13 @@ class ResumeService:
                 raise InvalidRequestError(f"Paragraph {index} isn't in this resume.")
             if not resume.paragraphs[index].text:
                 raise InvalidRequestError("Blank paragraphs can't be part of the Summary or Skills section.")
+        if set(bullets) & set(summary + skills):
+            raise InvalidRequestError("A paragraph can be only one of Summary, Skills or Experience bullets.")
+        for index in bullets:
+            if not 0 <= index < len(resume.paragraphs):
+                raise InvalidRequestError(f"Paragraph {index} isn't in this resume.")
+            if not resume.paragraphs[index].text:
+                raise InvalidRequestError("Blank paragraphs can't be experience bullets.")
         listed = skills_from_text([resume.paragraphs[i].text for i in skills])
         if not listed:
             raise InvalidRequestError("The paragraphs marked as Skills don't list any skills.")
@@ -99,7 +106,7 @@ class ResumeService:
         keep = resume.skills is not None and resume.skills_paragraphs == skills
         with self._db.transaction() as uow:
             uow.resumes.save_mapping(
-                resume.version, summary, skills, resume.skills if keep and resume.skills else listed
+                resume.version, summary, skills, resume.skills if keep and resume.skills else listed, bullets
             )
         return self.get(resume.version)
 

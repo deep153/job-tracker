@@ -30,7 +30,7 @@ async def upload_resume(file: UploadFile, services: ServicesDep) -> dict[str, An
 
 @router.put("/mapping")
 def save_resume_mapping(body: ResumeMappingIn, services: ServicesDep) -> dict[str, Any]:
-    return resume_json(services.resumes.save_mapping(body.summary, body.skills))
+    return resume_json(services.resumes.save_mapping(body.summary, body.skills, body.bullets))
 
 
 @router.put("/skills")

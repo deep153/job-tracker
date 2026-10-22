@@ -24,10 +24,15 @@ def resume_version_json(resume: ResumeVersion) -> dict[str, Any]:
 def resume_json(resume: ResumeVersion) -> dict[str, Any]:
     mapping = None
     if resume.mapped:
-        mapping = {"summary": resume.summary_paragraphs, "skills": resume.skills_paragraphs}
+        mapping = {
+            "summary": resume.summary_paragraphs,
+            "skills": resume.skills_paragraphs,
+            "bullets": resume.bullet_paragraphs or [],
+        }
     return {
         **resume_version_json(resume),
         "paragraphs": [asdict(p) for p in resume.paragraphs],
         "mapping": mapping,
+        "proposed_bullets": resume.proposed_bullets,
         "skills": resume.skills,
     }

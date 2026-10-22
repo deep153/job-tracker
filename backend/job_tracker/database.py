@@ -110,7 +110,8 @@ CREATE TABLE IF NOT EXISTS resume_master (
     page_count INTEGER NOT NULL,
     summary_paragraphs TEXT,
     skills_paragraphs TEXT,
-    skills TEXT
+    skills TEXT,
+    bullet_paragraphs TEXT
 );
 
 CREATE TABLE IF NOT EXISTS applications (
@@ -205,6 +206,7 @@ _ADDED_COLUMNS = {
         "screenshot": "INTEGER NOT NULL DEFAULT 0",
         "cover_letter": "TEXT",
     },
+    "resume_master": {"bullet_paragraphs": "TEXT"},
 }
 
 

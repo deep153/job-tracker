@@ -36,10 +36,15 @@ class ResumeRepository:
     def all(self) -> list[ResumeVersion]:
         return [_version(row) for row in self._conn.execute("SELECT * FROM resume_master ORDER BY id DESC")]
 
-    def save_mapping(self, version: int, summary: list[int], skills_paragraphs: list[int], skills: list[str]) -> None:
+    def save_mapping(
+        self, version: int, summary: list[int], skills_paragraphs: list[int], skills: list[str], bullets: list[int]
+    ) -> None:
         self._conn.execute(
-            "UPDATE resume_master SET summary_paragraphs = ?, skills_paragraphs = ?, skills = ? WHERE id = ?",
-            (json.dumps(summary), json.dumps(skills_paragraphs), json.dumps(skills), version),
+            """
+            UPDATE resume_master SET summary_paragraphs = ?, skills_paragraphs = ?, skills = ?, bullet_paragraphs = ?
+            WHERE id = ?
+            """,
+            (json.dumps(summary), json.dumps(skills_paragraphs), json.dumps(skills), json.dumps(bullets), version),
         )
 
     def save_skills(self, version: int, skills: list[str]) -> None:
@@ -61,4 +66,5 @@ def _version(row: sqlite3.Row) -> ResumeVersion:
         summary_paragraphs=_optional_json(row["summary_paragraphs"]),
         skills_paragraphs=_optional_json(row["skills_paragraphs"]),
         skills=_optional_json(row["skills"]),
+        bullet_paragraphs=_optional_json(row["bullet_paragraphs"]),
     )

@@ -8,7 +8,17 @@ from pypdf import PdfReader
 
 from job_tracker.app import create_app
 from job_tracker.clients.libreoffice import LibreOffice
-from tests.support.resumes import SKILL_LINES, SUMMARY, index_of, mapping_for, sample_resume, upload
+from tests.support.resumes import (
+    BULLETS,
+    PUBLICATION,
+    SKILL_LINES,
+    SUMMARY,
+    full_resume,
+    index_of,
+    mapping_for,
+    sample_resume,
+    upload,
+)
 
 
 def pdf_text(pdf: bytes) -> str:
@@ -161,6 +171,54 @@ def test_incomplete_or_invalid_mappings_are_rejected(client: TestClient) -> None
             "Blank paragraphs can't be part of the Summary or Skills section.",
         ),
         ({**good, "skills": heading_only}, "The paragraphs marked as Skills don't list any skills."),
+    ]
+    for mapping, message in cases:
+        response = client.put("/api/resume/mapping", json=mapping)
+        assert response.status_code == 422, mapping
+        assert response.json()["detail"] == message
+
+    assert client.get("/api/resume").json()["mapping"] is None
+
+
+def test_experience_bullets_default_to_the_list_items_after_the_skills_section(client: TestClient) -> None:
+    resume = upload(client, full_resume()).json()
+    assert resume["proposed_bullets"] is None  # nothing to go by until the Summary and Skills are marked
+    assert [p["is_list"] for p in resume["paragraphs"] if p["text"] == BULLETS[0]] == [True]
+
+    mapped = client.put("/api/resume/mapping", json=mapping_for(resume)).json()
+
+    assert mapped["mapping"]["bullets"] == []
+    assert mapped["proposed_bullets"] == [index_of(resume, bullet) for bullet in BULLETS]
+    assert index_of(resume, PUBLICATION) not in mapped["proposed_bullets"]
+
+
+def test_experience_bullets_are_saved_with_the_mapping(client: TestClient) -> None:
+    resume = upload(client, full_resume()).json()
+    bullets = [index_of(resume, bullet) for bullet in BULLETS[:3]]
+
+    saved = client.put("/api/resume/mapping", json={**mapping_for(resume), "bullets": [bullets[2], *bullets]})
+
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["mapping"]["bullets"] == bullets
+    assert saved.json()["ready"] is True
+    assert client.get("/api/resume").json()["mapping"]["bullets"] == bullets
+
+    # A mapping saved without bullets (as before they existed) is still ready.
+    without = {key: value for key, value in mapping_for(resume).items() if key != "bullets"}
+    unmarked = client.put("/api/resume/mapping", json=without).json()
+    assert (unmarked["mapping"]["bullets"], unmarked["ready"]) == ([], True)
+
+
+def test_experience_bullets_cannot_overlap_the_summary_or_skills_or_be_blank(client: TestClient) -> None:
+    resume = upload(client, full_resume()).json()
+    good = mapping_for(resume)
+    blank = next(p["index"] for p in resume["paragraphs"] if not p["text"])
+    overlap = "A paragraph can be only one of Summary, Skills or Experience bullets."
+    cases = [
+        ({**good, "bullets": good["summary"]}, overlap),
+        ({**good, "bullets": good["skills"][:1]}, overlap),
+        ({**good, "bullets": [blank]}, "Blank paragraphs can't be experience bullets."),
+        ({**good, "bullets": [999]}, "Paragraph 999 isn't in this resume."),
     ]
     for mapping, message in cases:
         response = client.put("/api/resume/mapping", json=mapping)
