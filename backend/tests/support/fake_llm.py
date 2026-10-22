@@ -28,8 +28,12 @@ class LLMCall:
         return "cover_letter" in self.schema.get("properties", {})
 
     @property
+    def is_profile(self) -> bool:
+        return "education" in self.schema.get("properties", {})
+
+    @property
     def is_scoring(self) -> bool:
-        return not self.is_tailoring and not self.is_answering and not self.is_cover_letter
+        return not (self.is_tailoring or self.is_answering or self.is_cover_letter or self.is_profile)
 
     @property
     def questions(self) -> list[str]:
@@ -42,6 +46,31 @@ DEFAULT_COVER_LETTER = (
     "Dear Globex hiring team,\n\nI have spent six years building payment systems in Python and Go, and I would "
     "like to bring that to your backend team.\n\nSincerely,\nJordan Rivera"
 )
+# Read the way Claude might read `full_resume()`: the name as the resume shows it, abbreviated degrees, and the
+# lower degree first.
+DEFAULT_PROFILE: dict[str, Any] = {
+    "first_name": "JORDAN",
+    "last_name": "RIVERA",
+    "city": "Brooklyn",
+    "region": "NY",
+    "country": "United States",
+    "education": [
+        {
+            "school": "University of Mumbai",
+            "degree": "B.Tech.",
+            "discipline": "Computer Engineering",
+            "end_month": "June",
+            "end_year": "2017",
+        },
+        {
+            "school": "Columbia University",
+            "degree": "MS",
+            "discipline": "Computer Science",
+            "end_month": "05",
+            "end_year": "2020",
+        },
+    ],
+}
 
 
 class FakeLLM:
@@ -54,6 +83,7 @@ class FakeLLM:
     then a stock answer that rewrites the summary and leaves the skills lines and bullets as they are.
     Answering prompts get the drafts scripted with `draft` for their questions, and no answer for the rest.
     Cover letter prompts get DEFAULT_COVER_LETTER.
+    Profile prompts get DEFAULT_PROFILE.
     """
 
     INPUT_TOKENS = 1000
@@ -115,6 +145,9 @@ class FakeLLM:
     def cover_letter_calls(self) -> list[LLMCall]:
         return [call for call in self.calls if call.is_cover_letter]
 
+    def profile_calls(self) -> list[LLMCall]:
+        return [call for call in self.calls if call.is_profile]
+
     def generate(
         self, *, api_key: str, model: str, system: str, prompt: str, schema: dict[str, Any], max_tokens: int
     ) -> LLMResponse:
@@ -134,6 +167,8 @@ class FakeLLM:
             return LLMResponse({"answers": drafts}, model, self.INPUT_TOKENS, self.OUTPUT_TOKENS)
         if call.is_cover_letter:
             return LLMResponse({"cover_letter": DEFAULT_COVER_LETTER}, model, self.INPUT_TOKENS, self.OUTPUT_TOKENS)
+        if call.is_profile:
+            return LLMResponse(DEFAULT_PROFILE, model, self.INPUT_TOKENS, self.OUTPUT_TOKENS)
         answer = tailored if call.is_tailoring else self._resume_score(prompt) or self._answers.get(_title(prompt))
         if isinstance(answer, LLMError):
             raise answer

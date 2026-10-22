@@ -19,6 +19,7 @@ from job_tracker.services.cost_service import CostService
 from job_tracker.services.cover_letter_writer import CoverLetterWriter
 from job_tracker.services.fit_scorer import FitScorer
 from job_tracker.services.job_service import JobService
+from job_tracker.services.profile_reader import ProfileReader
 from job_tracker.services.profile_service import ProfileService
 from job_tracker.services.resume_service import ResumeService
 from job_tracker.services.resume_tailor import ResumeTailor
@@ -80,5 +81,5 @@ def build_services(
         applications,
         CostService(db),
         AnswerBankService(db),
-        ProfileService(db, settings, resumes),
+        ProfileService(db, settings, resumes, ProfileReader(llm)),
     )
