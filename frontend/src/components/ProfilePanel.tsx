@@ -1,24 +1,44 @@
 import { useEffect, useState } from "react";
 import { applyProfile, extractProfile } from "../api/resume";
-import type { ProfileField, ProfileProposal } from "../types/profile";
+import type { Education, ProfileField, ProfileProposal } from "../types/profile";
 import { AlertIcon, CheckIcon } from "./icons";
 
 /** My answer to one field, and whether to save it (for a field I already have an answer to: replace it). */
 type Row = { answer: string; save: boolean };
+
+const EDUCATION_KEYS: Record<string, keyof Education> = {
+  School: "school",
+  Degree: "degree",
+  Discipline: "discipline",
+  "End date month": "end_month",
+  "End date year": "end_year",
+};
 
 /** A field my answer bank already answers the same way (or that has nothing new to offer) needs no review. */
 function settled(field: ProfileField): boolean {
   return field.current !== null && (field.value === "" || field.value === field.current);
 }
 
-function rowsFrom(proposal: ProfileProposal): Record<string, Row> {
-  return Object.fromEntries(
-    proposal.fields.map((f) => [f.question, { answer: f.value, save: f.current === null && f.value !== "" }]),
+function initialRow(field: ProfileField): Row {
+  return { answer: field.value, save: field.current === null && field.value !== "" };
+}
+
+/** The proposal's fields, with the education ones taken from the chosen degree. */
+function withEducation(proposal: ProfileProposal, chosen: number | null): ProfileField[] {
+  const entry = chosen === null ? undefined : proposal.education[chosen];
+  return proposal.fields.map((f) =>
+    f.section === "education" && entry ? { ...f, value: entry[EDUCATION_KEYS[f.question]] ?? f.value } : f,
   );
+}
+
+function describe(entry: Education): string {
+  const degree = [entry.degree, entry.discipline].filter(Boolean).join(" in ");
+  return [degree, entry.school].filter(Boolean).join(", ") + (entry.end_year ? ` (${entry.end_year})` : "");
 }
 
 export function ProfilePanel({ onClose }: { onClose: () => void }) {
   const [proposal, setProposal] = useState<ProfileProposal | null>(null);
+  const [chosen, setChosen] = useState<number | null>(null);
   const [rows, setRows] = useState<Record<string, Row>>({});
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -29,7 +49,8 @@ export function ProfilePanel({ onClose }: { onClose: () => void }) {
     try {
       const next = await extractProfile();
       setProposal(next);
-      setRows(rowsFrom(next));
+      setChosen(next.selected_education);
+      setRows(Object.fromEntries(withEducation(next, next.selected_education).map((f) => [f.question, initialRow(f)])));
     } catch (e) {
       setError((e as Error).message);
     }
@@ -43,11 +64,20 @@ export function ProfilePanel({ onClose }: { onClose: () => void }) {
     setRows((current) => ({ ...current, [question]: { ...current[question], ...row } }));
   }
 
+  function choose(index: number) {
+    if (!proposal) return;
+    setChosen(index);
+    const education = withEducation(proposal, index).filter((f) => f.section === "education");
+    setRows((current) => ({ ...current, ...Object.fromEntries(education.map((f) => [f.question, initialRow(f)])) }));
+  }
+
+  const fields = proposal ? withEducation(proposal, chosen) : [];
+
   async function save() {
     if (!proposal) return;
     setSaving(true);
     setError(null);
-    const answers = proposal.fields
+    const answers = fields
       .filter((f) => !settled(f) && rows[f.question].save && rows[f.question].answer.trim())
       .map((f) => ({ question: f.question, category: f.category, answer: rows[f.question].answer, replace: true }));
     try {
@@ -60,10 +90,12 @@ export function ProfilePanel({ onClose }: { onClose: () => void }) {
     }
   }
 
-  const open = proposal?.fields.filter((f) => !settled(f)) ?? [];
-  const settledCount = (proposal?.fields.length ?? 0) - open.length;
+  const open = fields.filter((f) => !settled(f));
+  const settledCount = fields.length - open.length;
+  const education = proposal?.education ?? [];
   const sections = [
     { key: "resume", title: "From your resume" },
+    { key: "education", title: "Education" },
     { key: "questions", title: "Questions your resume can't answer" },
   ] as const;
 
@@ -106,15 +138,40 @@ export function ProfilePanel({ onClose }: { onClose: () => void }) {
                 )}
               </div>
             )}
+            {proposal?.ai_note && (
+              <div className="notice notice-info" role="status">
+                <span className="notice-text">{proposal.ai_note}</span>
+              </div>
+            )}
             {!proposal && !error && <div className="skeleton profile-skeleton" aria-busy="true" aria-label="Reading" />}
             {proposal &&
               sections.map((section) => {
-                const fields = open.filter((f) => f.section === section.key);
-                if (fields.length === 0) return null;
+                const sectionFields = open.filter((f) => f.section === section.key);
+                const switcher = section.key === "education" && education.length > 1;
+                if (sectionFields.length === 0 && !switcher) return null;
                 return (
                   <fieldset className="profile-section" key={section.key}>
                     <legend className="answer-group-title">{section.title}</legend>
-                    {fields.map((field) => (
+                    {switcher && (
+                      <div className="profile-row">
+                        <label className="field-label" htmlFor="profile-degree">
+                          Degree to use
+                        </label>
+                        <select
+                          id="profile-degree"
+                          className="text-input"
+                          value={chosen ?? 0}
+                          onChange={(e) => choose(Number(e.target.value))}
+                        >
+                          {education.map((entry, index) => (
+                            <option key={index} value={index}>
+                              {describe(entry)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    {sectionFields.map((field) => (
                       <ProfileRow
                         key={field.question}
                         field={field}
