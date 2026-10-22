@@ -26,11 +26,12 @@ from job_tracker.models.application import (
 )
 from job_tracker.models.job import Job
 from job_tracker.models.platform import PLATFORM_NAMES, Platform
-from job_tracker.models.resume import ResumeVersion, SkillLine
+from job_tracker.models.resume import MasterResume, ResumeVersion, SkillLine
 from job_tracker.services.answer_engine import draft_answers, exact_choice, open_ended
 from job_tracker.services.answer_writer import AnswerWriter
 from job_tracker.services.cover_letter_writer import CoverLetterWriter, as_docx, tidy
 from job_tracker.services.errors import ConflictError, InvalidRequestError, NotFoundError, SetupIncompleteError
+from job_tracker.services.fit_scorer import FitScorer
 from job_tracker.services.pricing import estimate_cost
 from job_tracker.services.resume_reader import skill_line
 from job_tracker.services.resume_renderer import render
@@ -64,9 +65,22 @@ def _now() -> str:
     return datetime.now(UTC).isoformat()
 
 
+def _terms(text: str) -> list[str]:
+    """Lower-cased words without punctuation, plurals folded ("APIs" is "api")."""
+    words = re.findall(r"[\w+#]+", text.casefold())
+    return [w[:-1] if len(w) > 3 and w.endswith("s") and not w.endswith("ss") else w for w in words]
+
+
 def covered(keywords: list[str], text: str) -> list[bool]:
-    """Which keywords the text mentions, as whole words and ignoring case."""
-    return [re.search(rf"(?<!\w){re.escape(keyword)}(?!\w)", text, re.I) is not None for keyword in keywords]
+    """Which keywords the text mentions, as whole words, ignoring case, punctuation and plurals. A keyword with a
+    parenthetical ("AWS (Lambda)") counts as the term before it."""
+    terms = _terms(text)
+    result = []
+    for keyword in keywords:
+        wanted = _terms(keyword.split("(")[0]) or _terms(keyword)
+        n = len(wanted)
+        result.append(bool(wanted) and any(terms[i : i + n] == wanted for i in range(len(terms) - n + 1)))
+    return result
 
 
 @dataclass(frozen=True)
@@ -95,6 +109,17 @@ def _typed(current: FormAnswer, text: str | None) -> FormAnswer:
 
 def _resume_text(version: ResumeVersion) -> str:
     return "\n".join(p.text for p in version.paragraphs if p.text)
+
+
+def _target_keywords(job: Job) -> list[str]:
+    """The Fit Scorer's matched and missing keywords for the job, or none if it hasn't been scored."""
+    if job.score is None:
+        return []
+    keywords: list[str] = []
+    for keyword in [*job.score.matched_keywords, *job.score.missing_keywords]:
+        if keyword.casefold() not in {k.casefold() for k in keywords}:
+            keywords.append(keyword)
+    return keywords
 
 
 def _lines(version: ResumeVersion) -> dict[int, SkillLine]:
@@ -138,6 +163,7 @@ class ApplicationService:
         settings: SettingsService,
         resumes: ResumeService,
         tailor: ResumeTailor,
+        scorer: FitScorer,
         writer: AnswerWriter,
         letters: CoverLetterWriter,
         office: LibreOffice,
@@ -148,6 +174,7 @@ class ApplicationService:
         self._settings = settings
         self._resumes = resumes
         self._tailor = tailor
+        self._scorer = scorer
         self._writer = writer
         self._letters = letters
         self._office = office
@@ -507,6 +534,7 @@ class ApplicationService:
             skills=list(_lines(version).values()),
             allowed_skills=version.skills,
             job=job,
+            target_keywords=_target_keywords(job),
         )
         target = self._dir / directory
         target.mkdir(parents=True)
@@ -540,7 +568,26 @@ class ApplicationService:
             covered_after=covered(result.keywords, text),
             page_count=pages,
             master_page_count=version.page_count,
+            gaps=result.gaps,
+            score_before=job.score.score if job.score is not None else None,
+            score_after=self._rescore(application_id, job, version, text, result.skills),
         )
+
+    def _rescore(
+        self, application_id: int, job: Job, version: ResumeVersion, text: str, skills: list[SkillLine]
+    ) -> int | None:
+        """The Fit Scorer's score for the tailored resume, or None if the call fails. The job's own score (against
+        the master) stays as it is."""
+        ai = self._settings.ai()
+        assert ai.anthropic_api_key is not None
+        tailored = MasterResume(version.version, text, [skill for line in skills for skill in line.skills])
+        try:
+            fit = self._scorer.score(ai.anthropic_api_key, ai.scoring_model, tailored, self._settings.search(), job)
+        except LLMError as error:
+            log.warning("re-scoring the tailored resume of application %s failed: %s", application_id, error.message)
+            return None
+        self._record_usage("rescoring", application_id, job.id, fit.model, fit.input_tokens, fit.output_tokens)
+        return fit.score
 
     def _record_usage(
         self, kind: str, application_id: int, job_id: int, model: str, input_tokens: int, output_tokens: int

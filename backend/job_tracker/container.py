@@ -63,6 +63,7 @@ def build_services(
         settings,
         resumes,
         ResumeTailor(llm),
+        scorer,
         AnswerWriter(llm),
         CoverLetterWriter(llm),
         office,

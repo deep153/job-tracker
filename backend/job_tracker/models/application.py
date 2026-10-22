@@ -45,6 +45,10 @@ class TailoredResume:
     covered_after: list[bool]
     page_count: int
     master_page_count: int
+    # None on versions tailored before gaps and fit scores were kept.
+    gaps: list[str] | None = None
+    score_before: int | None = None  # the job's fit score when it was tailored
+    score_after: int | None = None  # the Fit Scorer's score for the tailored resume, unless that call failed
 
 
 @dataclass(frozen=True)

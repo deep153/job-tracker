@@ -16,7 +16,8 @@ _WITH_RESUME = """
     SELECT applications.*, resume_versions.master_version, resume_versions.directory,
         resume_versions.master_summary, resume_versions.summary, resume_versions.master_skills,
         resume_versions.skills, resume_versions.keywords, resume_versions.covered_before,
-        resume_versions.covered_after, resume_versions.page_count, resume_versions.master_page_count
+        resume_versions.covered_after, resume_versions.page_count, resume_versions.master_page_count,
+        resume_versions.gaps, resume_versions.score_before, resume_versions.score_after
     FROM applications
     LEFT JOIN resume_versions ON resume_versions.application_id = applications.id
 """
@@ -122,8 +123,8 @@ class ApplicationRepository:
             """
             INSERT OR REPLACE INTO resume_versions (application_id, job_id, master_version, directory,
                 master_summary, summary, master_skills, skills, keywords, covered_before, covered_after,
-                page_count, master_page_count, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                page_count, master_page_count, created_at, gaps, score_before, score_after)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 application_id,
@@ -140,6 +141,9 @@ class ApplicationRepository:
                 resume.page_count,
                 resume.master_page_count,
                 now,
+                None if resume.gaps is None else json.dumps(resume.gaps),
+                resume.score_before,
+                resume.score_after,
             ),
         )
 
@@ -211,6 +215,9 @@ def _application(row: sqlite3.Row) -> Application:
             covered_after=json.loads(row["covered_after"]),
             page_count=row["page_count"],
             master_page_count=row["master_page_count"],
+            gaps=None if row["gaps"] is None else json.loads(row["gaps"]),
+            score_before=row["score_before"],
+            score_after=row["score_after"],
         )
     return Application(
         id=row["id"],

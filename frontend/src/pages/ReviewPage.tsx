@@ -647,7 +647,7 @@ function InReview({
           </section>
           <SummaryDiff master={resume.summary.master} tailored={resume.summary.tailored} />
           <SkillsDiff master={resume.skills.master} tailored={resume.skills.tailored} />
-          <Coverage coverage={resume.coverage} />
+          <Coverage coverage={resume.coverage} fitScore={resume.fit_score} />
         </div>
         <section className="panel resume-preview-panel" aria-labelledby="preview-heading">
           <div className="panel-header">
@@ -834,16 +834,34 @@ function SkillsDiff({ master, tailored }: { master: SkillLine[]; tailored: Skill
   );
 }
 
-function Coverage({ coverage }: { coverage: TailoredResume["coverage"] }) {
+function Coverage({
+  coverage,
+  fitScore,
+}: {
+  coverage: TailoredResume["coverage"];
+  fitScore: TailoredResume["fit_score"];
+}) {
   const percent = (n: number) => (coverage.total ? Math.round((n / coverage.total) * 100) : 0);
   return (
     <section className="panel" aria-labelledby="coverage-heading">
       <div className="panel-header">
         <h2 className="panel-title" id="coverage-heading">
-          Keyword coverage
+          {fitScore ? "Fit score and keyword coverage" : "Keyword coverage"}
         </h2>
       </div>
       <div className="panel-body">
+        {fitScore && (
+          <p className="coverage-numbers" aria-label="Fit score">
+            <span>
+              Fit <strong>{fitScore.before ?? "–"}</strong> before
+            </span>
+            <span aria-hidden="true">→</span>
+            <span>
+              <strong>{fitScore.after ?? "–"}</strong> after
+            </span>
+            {fitScore.after === null && <span className="panel-empty">The tailored resume couldn't be scored.</span>}
+          </p>
+        )}
         <p className="coverage-numbers">
           <span>
             <strong>{coverage.before}</strong> of {coverage.total} before ({percent(coverage.before)}%)

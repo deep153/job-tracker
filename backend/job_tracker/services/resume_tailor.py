@@ -1,6 +1,7 @@
-"""The Resume Tailor: a new Summary and reordered Skills for one job, using only skills from my master list."""
+"""The Resume Tailor: a new Summary and reordered Skills for one job, using only skills from my master list, and
+the job's keywords it couldn't cover."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, TypeGuard
 
 from job_tracker.clients.claude import LLM, LLMError
@@ -23,7 +24,10 @@ resume backs it up. Keep it about as long as the current Summary, and give one t
 the allowed skills list, spelled as they are there. You may add an allowed skill the posting asks for to the \
 line it fits best, or leave out a skill that doesn't matter for this job.
 - Keywords are the posting's most important skills, tools and qualifications (at most 20), in its wording, \
-a few words each, most important first."""
+a few words each, most important first. When target keywords are given, aim the Summary and Skills at those \
+instead.
+- Gaps are the keywords (the target keywords when given, otherwise yours) that the resume can't honestly show, \
+even after your edits. Spell them as they are in the keywords."""
 
 SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -46,8 +50,13 @@ SCHEMA: dict[str, Any] = {
             },
         },
         "keywords": {"type": "array", "items": {"type": "string"}},
+        "gaps": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Keywords the resume can't honestly show.",
+        },
     },
-    "required": ["summary", "skills", "keywords"],
+    "required": ["summary", "skills", "keywords", "gaps"],
     "additionalProperties": False,
 }
 
@@ -61,6 +70,7 @@ class TailorRequest:
     skills: list[SkillLine]
     allowed_skills: list[str]
     job: Job
+    target_keywords: list[str] = field(default_factory=list)  # the Fit Scorer's; empty lets the tailor pick
 
 
 @dataclass(frozen=True)
@@ -76,7 +86,8 @@ class Shorten:
 class TailorResult:
     summary: list[str]
     skills: list[SkillLine]  # one per line of the request, in the same order
-    keywords: list[str]
+    keywords: list[str]  # the target keywords, or the tailor's own when there were none
+    gaps: list[str]  # of the keywords, in their spelling
     model: str
     input_tokens: int
     output_tokens: int
@@ -96,6 +107,8 @@ def build_prompt(request: TailorRequest, shorten: Shorten | None) -> str:
         f"<allowed_skills>\n{', '.join(request.allowed_skills)}\n</allowed_skills>",
         f"<job>\n{job_text(request.job)}\n</job>",
     ]
+    if request.target_keywords:
+        parts.append(f"<target_keywords>\n{', '.join(request.target_keywords)}\n</target_keywords>")
     if shorten is None:
         parts.append("Tailor my Summary and Skills to this job.")
     else:
@@ -126,7 +139,8 @@ class ResumeTailor:
         )
         data = response.data
         summary, skills, keywords = data.get("summary"), data.get("skills"), data.get("keywords")
-        if not _strings(summary) or not _strings(keywords) or not isinstance(skills, list):
+        gaps = data.get("gaps", [])
+        if not _strings(summary) or not _strings(keywords) or not _strings(gaps) or not isinstance(skills, list):
             raise LLMError(_INVALID)
         summary = [" ".join(text.split()) for text in summary if text.strip()]
         if not summary:
@@ -137,10 +151,13 @@ class ResumeTailor:
             if not isinstance(number, int) or isinstance(number, bool) or not _strings(line.get("skills")):
                 raise LLMError(_INVALID)
             chosen[number - 1] = line["skills"]
+        targets = request.target_keywords or _tidy(keywords)[:MAX_KEYWORDS]
+        spelling = {_key(keyword): keyword for keyword in targets}
         return TailorResult(
             summary=summary,
             skills=allowed_lines(request.skills, chosen, request.allowed_skills),
-            keywords=_tidy(keywords)[:MAX_KEYWORDS],
+            keywords=targets,
+            gaps=[spelling[_key(gap)] for gap in _tidy(gaps) if _key(gap) in spelling],
             model=response.model,
             input_tokens=response.input_tokens,
             output_tokens=response.output_tokens,

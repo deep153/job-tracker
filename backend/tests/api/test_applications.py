@@ -52,14 +52,13 @@ def test_applying_tailors_the_resume_and_opens_the_review(
         {"label": "Infrastructure", "skills": ["Kafka", "Kubernetes", "PostgreSQL", "Docker", "AWS (Lambda, S3)"]},
     ]
     assert (resume["page_count"], resume["master_page_count"]) == (1, 1)
-    coverage = resume["coverage"]
+    coverage = resume["coverage"]  # the Fit Scorer's keywords for the job
     assert [(k["keyword"], k["before"], k["after"]) for k in coverage["keywords"]] == [
         ("Python", True, True),
-        ("Go", True, True),
+        ("PostgreSQL", True, True),
         ("Kafka", False, True),
-        ("Payments", True, True),
     ]
-    assert (coverage["before"], coverage["after"], coverage["total"]) == (3, 4, 4)
+    assert (coverage["before"], coverage["after"], coverage["total"]) == (2, 3, 3)
 
     pdf = client.get(f"/api/applications/{application['id']}/resume.pdf")
     assert pdf.headers["content-type"] == "application/pdf"

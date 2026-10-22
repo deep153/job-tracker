@@ -53,7 +53,7 @@ def scored_job(
     configure_search(client, {**READY_SETTINGS, "roles": ["Engineer"], "platforms": [platform]})
     boards.search_returns([_BOARD_URLS[platform](BOARD)])
     run_to_completion(client)
-    [job] = client.get("/api/jobs").json()
+    [job] = client.get("/api/jobs").json() + client.get("/api/jobs/below-threshold").json()
     return int(job["id"])
 
 

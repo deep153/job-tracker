@@ -29,6 +29,8 @@ def _resume_json(application_id: int, resume: TailoredResume) -> dict[str, Any]:
             "after": sum(resume.covered_after),
             "total": len(resume.keywords),
         },
+        "gaps": resume.gaps,
+        "fit_score": None if resume.gaps is None else {"before": resume.score_before, "after": resume.score_after},
         "pdf_url": f"{base}/resume.pdf",
         "docx_url": f"{base}/resume.docx",
     }

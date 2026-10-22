@@ -48,7 +48,8 @@ class FakeLLM:
     """Answers with scripted structured outputs instead of calling Claude.
 
     Scoring prompts are answered by the job's title (the prompt's "Title: ..." line): a fit score of 80 with
-    stock reasons and keywords unless `score` or `answer` scripted something else for that title.
+    stock reasons and keywords unless `score` or `answer` scripted something else for that title, or
+    `score_resume` scripted a score for the resume being scored.
     Tailoring prompts get the answers queued with `tailor`, in order, then a stock answer that rewrites the
     summary and leaves the skills lines as they are.
     Answering prompts get the drafts scripted with `draft` for their questions, and no answer for the rest.
@@ -60,6 +61,7 @@ class FakeLLM:
 
     def __init__(self) -> None:
         self._answers: dict[str, dict[str, Any] | LLMError] = {}
+        self._resume_scores: dict[str, int] = {}
         self._tailorings: list[dict[str, Any] | LLMError] = []
         self._drafts: dict[str, str] = {}
         self._failure: LLMError | None = None
@@ -74,6 +76,11 @@ class FakeLLM:
             "matched_keywords": ["Python"],
             "missing_keywords": ["Kafka"],
         }
+
+    def score_resume(self, containing: str, score: int) -> None:
+        """Score `score` whenever the resume being scored contains `containing` (such as a tailored Summary),
+        whatever the job's title."""
+        self._resume_scores[containing] = score
 
     def answer(self, title: str, answer: dict[str, Any] | LLMError) -> None:
         """Answer with exactly this output (or raise this error) for jobs with this title."""
@@ -127,11 +134,11 @@ class FakeLLM:
             return LLMResponse({"answers": drafts}, model, self.INPUT_TOKENS, self.OUTPUT_TOKENS)
         if call.is_cover_letter:
             return LLMResponse({"cover_letter": DEFAULT_COVER_LETTER}, model, self.INPUT_TOKENS, self.OUTPUT_TOKENS)
-        answer = tailored if call.is_tailoring else self._answers.get(_title(prompt))
+        answer = tailored if call.is_tailoring else self._resume_score(prompt) or self._answers.get(_title(prompt))
         if isinstance(answer, LLMError):
             raise answer
         if answer is None and call.is_tailoring:
-            answer = {"summary": [DEFAULT_TAILORED_SUMMARY], "skills": [], "keywords": ["Python", "Kafka"]}
+            answer = {"summary": [DEFAULT_TAILORED_SUMMARY], "skills": [], "keywords": ["Python", "Kafka"], "gaps": []}
         if answer is None:
             answer = {
                 "score": 80,
@@ -140,6 +147,18 @@ class FakeLLM:
                 "missing_keywords": ["Kafka"],
             }
         return LLMResponse(answer, model, self.INPUT_TOKENS, self.OUTPUT_TOKENS)
+
+    def _resume_score(self, prompt: str) -> dict[str, Any] | None:
+        resume = re.search(r"<resume>\n(.*?)\n</resume>", prompt, re.S)
+        for containing, score in self._resume_scores.items():
+            if resume and containing in resume[1]:
+                return {
+                    "score": score,
+                    "reasons": [f"Scored {score}."],
+                    "matched_keywords": ["Python"],
+                    "missing_keywords": [],
+                }
+        return None
 
 
 def _questions(prompt: str) -> list[dict[str, str]]:

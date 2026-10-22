@@ -35,6 +35,7 @@ def test_editing_the_summary_and_skills_regenerates_the_pdf(client: TestClient, 
     coverage = resume["coverage"]
     assert [(k["keyword"], k["before"], k["after"]) for k in coverage["keywords"]] == [
         ("Python", True, True),
+        ("PostgreSQL", True, True),
         ("Kafka", False, True),
     ]
     pdf = client.get(resume["pdf_url"]).content

@@ -13,6 +13,7 @@ const ANTHROPIC_CONSOLE = "https://console.anthropic.com/settings/keys";
 const KIND_LABELS: Record<string, string> = {
   scoring: "Fit scoring",
   tailoring: "Resume tailoring",
+  rescoring: "Re-scoring tailored resumes",
   answers: "Open-ended answers",
   cover_letter: "Cover letters",
 };

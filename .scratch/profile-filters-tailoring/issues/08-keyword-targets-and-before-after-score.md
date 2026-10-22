@@ -6,15 +6,15 @@ Keyword coverage uses the target keywords, matched loosely: case- and punctuatio
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The tailoring request includes the scorer's matched and missing keywords when the job has a score
-- [ ] The tailoring answer schema includes gaps, and they're stored on the tailored resume version
-- [ ] The tailored resume is re-scored after rendering; before and after scores are stored and returned in the review bundle
-- [ ] Coverage before and after uses the target keywords with loose matching
-- [ ] The re-score's cost is recorded as AI usage and added to the application's cost
-- [ ] The review screen shows the before and after fit scores
-- [ ] Applications tailored before this change display without scores or gaps
-- [ ] The scripted fake LLM can script gaps in tailoring answers and a score for the tailored resume
-- [ ] Test: after applying to a scored job, the review bundle has before and after scores and the scripted gaps
-- [ ] Test: a resume line "Observability (Grafana, Kibana)" counts as covering the keyword "Observability", and "APIs" covers "API"
+- [x] The tailoring request includes the scorer's matched and missing keywords when the job has a score
+- [x] The tailoring answer schema includes gaps, and they're stored on the tailored resume version
+- [x] The tailored resume is re-scored after rendering; before and after scores are stored and returned in the review bundle
+- [x] Coverage before and after uses the target keywords with loose matching
+- [x] The re-score's cost is recorded as AI usage and added to the application's cost
+- [x] The review screen shows the before and after fit scores
+- [x] Applications tailored before this change display without scores or gaps
+- [x] The scripted fake LLM can script gaps in tailoring answers and a score for the tailored resume
+- [x] Test: after applying to a scored job, the review bundle has before and after scores and the scripted gaps
+- [x] Test: a resume line "Observability (Grafana, Kibana)" counts as covering the keyword "Observability", and "APIs" covers "API"

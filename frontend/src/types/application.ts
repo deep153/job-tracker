@@ -48,6 +48,11 @@ export type TailoredResume = {
     after: number;
     total: number;
   };
+  /** The job's keywords the tailor couldn't honestly cover; null on resumes tailored before gaps were kept. */
+  gaps: string[] | null;
+  /** The job's fit score before tailoring and the tailored resume's; null on resumes tailored before scores were
+   * kept, and either side null when there was no score (unscored job, or the re-score failed). */
+  fit_score: { before: number | null; after: number | null } | null;
   pdf_url: string;
   docx_url: string;
 };
