@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  addGap,
   answerQuestions,
   applyToJob,
   approveApplication,
@@ -693,6 +694,18 @@ function InReview({
           <SummaryDiff master={resume.summary.master} tailored={resume.summary.tailored} />
           <SkillsDiff master={resume.skills.master} tailored={resume.skills.tailored} />
           {resume.bullets && resume.bullets.length > 0 && <BulletsDiff bullets={resume.bullets} />}
+          {resume.gaps && resume.gaps.length > 0 && (
+            <GapsPanel
+              applicationId={application.id}
+              gaps={resume.gaps}
+              lines={resume.skills.tailored}
+              blocked={dirty ? "Regenerate or undo your edits first." : null}
+              onAdded={(saved) => {
+                onSaved(saved);
+                if (saved.resume) setDraft(draftFrom(saved.resume));
+              }}
+            />
+          )}
           <Coverage coverage={resume.coverage} fitScore={resume.fit_score} />
         </div>
         <section className="panel resume-preview-panel" aria-labelledby="preview-heading">
@@ -929,6 +942,117 @@ function BulletsDiff({ bullets }: { bullets: BulletEdit[] }) {
           })}
         </ul>
       )}
+    </section>
+  );
+}
+
+// Which Skills line a kind of skill usually goes on: [label pattern, skill pattern].
+const LINE_HINTS: [RegExp, RegExp][] = [
+  [
+    /lang/i,
+    /^(python|go|golang|java|javascript|typescript|rust|ruby|c\+\+|c#|c|scala|kotlin|swift|php|sql|bash|elixir)$/i,
+  ],
+  [/data|database|storage/i, /sql|postgres|mysql|mongo|redis|dynamo|cassandra|elastic|snowflake|bigquery|spark/i],
+  [/cloud|infra|devops|platform|ops/i, /aws|gcp|azure|kubernetes|k8s|docker|terraform|kafka|ci\/cd|linux|helm/i],
+  [/framework|librar/i, /react|django|flask|fastapi|spring|rails|node|express|vue|angular|next/i],
+];
+
+/** The best guess for the Skills line a gap belongs on, from the lines' labels; the last line otherwise. */
+function guessLine(keyword: string, lines: SkillLine[]): number {
+  for (const [label, skill] of LINE_HINTS) {
+    const index = lines.findIndex((line) => line.label && label.test(line.label));
+    if (index >= 0 && skill.test(keyword)) return index;
+  }
+  const words = new Set(keyword.toLowerCase().split(/\W+/).filter(Boolean));
+  const shared = lines.findIndex((line) =>
+    line.label
+      ?.toLowerCase()
+      .split(/\W+/)
+      .some((w) => words.has(w)),
+  );
+  return shared >= 0 ? shared : lines.length - 1;
+}
+
+function GapsPanel({
+  applicationId,
+  gaps,
+  lines,
+  blocked,
+  onAdded,
+}: {
+  applicationId: number;
+  gaps: string[];
+  lines: SkillLine[];
+  blocked: string | null;
+  onAdded: (application: Application) => void;
+}) {
+  const [chosen, setChosen] = useState<Record<string, number>>({});
+  const [adding, setAdding] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function add(gap: string) {
+    setAdding(gap);
+    setError(null);
+    try {
+      onAdded(await addGap(applicationId, gap, chosen[gap] ?? guessLine(gap, lines)));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setAdding(null);
+    }
+  }
+
+  return (
+    <section className="panel" aria-labelledby="gaps-heading">
+      <div className="panel-header">
+        <h2 className="panel-title" id="gaps-heading">
+          Gaps
+        </h2>
+        <span className="count count-small">{gaps.length}</span>
+      </div>
+      <div className="panel-body">
+        <p className="panel-empty">
+          The job asks for these, and your resume doesn't show them. If you have one, add it to your skills: it goes on
+          the line you pick here and into your master skills list for later applications.
+        </p>
+        {error && (
+          <div className="notice notice-error" role="alert">
+            <AlertIcon />
+            <span className="notice-text">{error}</span>
+          </div>
+        )}
+        <ul className="gap-list">
+          {gaps.map((gap) => (
+            <li className="gap" key={gap}>
+              <span className="keyword keyword-missing">{gap}</span>
+              <select
+                className="text-input gap-line"
+                aria-label={`Skills line for ${gap}`}
+                value={chosen[gap] ?? guessLine(gap, lines)}
+                onChange={(e) => setChosen({ ...chosen, [gap]: Number(e.target.value) })}
+              >
+                {lines.map((line, index) => (
+                  <option key={index} value={index}>
+                    {line.label ?? `Skills line ${index + 1}`}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="button button-secondary button-small"
+                onClick={() => void add(gap)}
+                disabled={adding !== null || blocked !== null}
+                title={blocked ?? undefined}
+                aria-busy={adding === gap}
+              >
+                {adding === gap && <span className="spinner spinner-dark" aria-hidden="true" />}
+                Add to my skills
+              </button>
+            </li>
+          ))}
+        </ul>
+        {blocked && <p className="field-hint">{blocked}</p>}
+      </div>
     </section>
   );
 }

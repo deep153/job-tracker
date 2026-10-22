@@ -4,13 +4,13 @@
 
 **Blocked by:** 08 (Tailoring targets the scorer's keywords, with a before/after fit score)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The review screen shows the gaps list, each with "Add to my skills" and a Skills line picker
-- [ ] The add-gap endpoint takes the keyword and the target Skills line
-- [ ] Adding a gap adds it to the master skills list and to the chosen line of this resume, then rebuilds the files, recomputes coverage and re-scores
-- [ ] No tailoring call is made
-- [ ] An add that would exceed the master's page count is refused, and nothing changes
-- [ ] The added gap leaves the gaps list
-- [ ] Test: adding a gap puts it on the chosen Skills line in the PDF text, adds it to the master skills list, and makes no tailoring call
-- [ ] Test: a later application can use the added skill on its Skills line
+- [x] The review screen shows the gaps list, each with "Add to my skills" and a Skills line picker
+- [x] The add-gap endpoint takes the keyword and the target Skills line
+- [x] Adding a gap adds it to the master skills list and to the chosen line of this resume, then rebuilds the files, recomputes coverage and re-scores
+- [x] No tailoring call is made
+- [x] An add that would exceed the master's page count is refused, and nothing changes
+- [x] The added gap leaves the gaps list
+- [x] Test: adding a gap puts it on the chosen Skills line in the PDF text, adds it to the master skills list, and makes no tailoring call
+- [x] Test: a later application can use the added skill on its Skills line

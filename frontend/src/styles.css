@@ -2164,6 +2164,29 @@ mark.diff-removed,
   justify-content: space-between;
 }
 
+.gap-list {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gap {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.gap .keyword {
+  flex: 1;
+}
+
+.gap-line {
+  width: auto;
+  min-width: 140px;
+}
+
 .bullet-diffs {
   margin: 0;
   padding: 0;
