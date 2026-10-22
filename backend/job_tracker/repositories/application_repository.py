@@ -179,6 +179,11 @@ class ApplicationRepository:
         )
         self._conn.execute("UPDATE applications SET updated_at = ? WHERE id = ?", (now, application_id))
 
+    def save_gaps(self, application_id: int, gaps: list[str]) -> None:
+        self._conn.execute(
+            "UPDATE resume_versions SET gaps = ? WHERE application_id = ?", (json.dumps(gaps), application_id)
+        )
+
     def save_cover_letter(self, application_id: int, cover_letter: str | None, now: str) -> None:
         self._conn.execute(
             "UPDATE applications SET cover_letter = ?, updated_at = ? WHERE id = ?", (cover_letter, now, application_id)

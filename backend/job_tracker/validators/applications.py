@@ -25,6 +25,13 @@ class BulletIn(BaseModel):
     text: str = Field(max_length=2000)
 
 
+class GapIn(BaseModel):
+    """A gap to add to my skills, and the Skills line (counted from 0) to put it on."""
+
+    keyword: Skill
+    line: int
+
+
 class TailoredResumeIn(BaseModel):
     """My edits in review: one text per Summary paragraph, the skills for each skills line, and the bullets I
     changed (the others keep their text)."""

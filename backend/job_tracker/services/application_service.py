@@ -64,6 +64,12 @@ class TailoringError(Exception):
         self.message = message
 
 
+class _TooLong(Exception):
+    def __init__(self, pages: int) -> None:
+        super().__init__(pages)
+        self.pages = pages
+
+
 def _now() -> str:
     return datetime.now(UTC).isoformat()
 
@@ -526,6 +532,58 @@ class ApplicationService:
                 )
         return self.get(application_id)
 
+    def add_gap(self, application_id: int, keyword: str, line: int) -> Application:
+        """Add one of the resume's gaps to my master skills list and to Skills line `line` (from 0) of this resume,
+        then regenerate and re-score it, with no tailoring call. Refused, changing nothing, if the resume would run
+        longer than the master."""
+        with self._edit_lock:
+            application = self.get(application_id)
+            resume = application.resume
+            if not application.editable or resume is None:
+                raise ConflictError("Only an application in review can be edited.")
+            gap = next((g for g in resume.gaps or [] if g.casefold() == " ".join(keyword.split()).casefold()), None)
+            if gap is None:
+                raise InvalidRequestError(f"“{keyword.strip()}” isn't one of this resume's gaps.")
+            if not 0 <= line < len(resume.skills):
+                raise InvalidRequestError(f"Your resume has no Skills line {line + 1}.")
+            version = self._resumes.get(resume.master_version)
+            lines = [
+                SkillLine(
+                    skills.label, [*skills.skills, gap] if n == line and gap not in skills.skills else skills.skills
+                )
+                for n, skills in enumerate(resume.skills)
+            ]
+            try:
+                pages, text = self._render(
+                    version,
+                    resume.summary,
+                    lines,
+                    resume.bullets or [],
+                    self._dir / resume.directory,
+                    max_pages=resume.master_page_count,
+                )
+            except _TooLong as error:
+                raise ConflictError(
+                    f"Adding “{gap}” would make your resume run to {error.pages} pages, longer than your "
+                    f"{resume.master_page_count}-page master, so it wasn't added. Shorten the resume first, or try "
+                    "another Skills line."
+                ) from None
+            self._resumes.add_skill(version.version, gap)
+            score = self._rescore(application_id, self._job(application.job_id), version, text, lines)
+            with self._db.transaction() as uow:
+                uow.applications.update_resume(
+                    application_id,
+                    resume.summary,
+                    lines,
+                    resume.bullets,
+                    covered(resume.keywords, text),
+                    pages,
+                    score,
+                    _now(),
+                )
+                uow.applications.save_gaps(application_id, [g for g in resume.gaps or [] if g != gap])
+        return self.get(application_id)
+
     def _job(self, job_id: int) -> Job:
         with self._db.transaction() as uow:
             job = uow.jobs.get(job_id)
@@ -540,10 +598,12 @@ class ApplicationService:
         skills: list[SkillLine],
         bullets: list[BulletEdit],
         target: Path,
+        max_pages: int | None = None,
     ) -> tuple[int, str]:
         """Write the tailored .docx and PDF into `target`; returns the PDF's page count and the resume's text.
 
-        The files are replaced only once both are made, so a failed conversion leaves the previous ones.
+        The files are replaced only once both are made, so a failed conversion leaves the previous ones. So does a
+        PDF longer than `max_pages`, which raises _TooLong.
         """
         assert version.summary_paragraphs is not None
         master = self._resumes.file(version.version, MASTER_DOCX).read_bytes()
@@ -556,6 +616,8 @@ class ApplicationService:
         try:
             pdf = self._office.convert_to_pdf(draft, target)
             pages = len(PdfReader(pdf).pages)
+            if max_pages is not None and pages > max_pages:
+                raise _TooLong(pages)
             os.replace(draft, target / TAILORED_DOCX)
             os.replace(pdf, target / TAILORED_PDF)
         finally:

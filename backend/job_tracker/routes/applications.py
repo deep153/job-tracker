@@ -8,7 +8,7 @@ from job_tracker.routes.resume import DOCX_TYPE
 from job_tracker.serializers.applications import application_json, application_summary_json
 from job_tracker.services.application_service import TAILORED_DOCX, TAILORED_PDF
 from job_tracker.validators.answers import FormAnswersIn, SaveToBankIn
-from job_tracker.validators.applications import CoverLetterIn, StatusIn, TailoredResumeIn
+from job_tracker.validators.applications import CoverLetterIn, GapIn, StatusIn, TailoredResumeIn
 
 router = APIRouter(prefix="/api", tags=["applications"])
 
@@ -45,6 +45,14 @@ def edit_tailored_resume(application_id: int, body: TailoredResumeIn, services: 
     """Regenerates the tailored .docx and PDF from my edits."""
     bullets = {bullet.index: bullet.text for bullet in body.bullets}
     application = services.applications.edit(application_id, body.summary, body.skills, bullets)
+    return application_json(application, services.jobs.get(application.job_id))
+
+
+@router.post("/applications/{application_id}/gaps")
+def add_gap(application_id: int, body: GapIn, services: ServicesDep) -> dict[str, Any]:
+    """Adds a gap to my master skills list and to one Skills line of this resume, without a tailoring call (409
+    if that would make the resume longer than the master)."""
+    application = services.applications.add_gap(application_id, body.keyword, body.line)
     return application_json(application, services.jobs.get(application.job_id))
 
 

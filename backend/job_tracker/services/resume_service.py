@@ -127,6 +127,20 @@ class ResumeService:
             uow.resumes.save_skills(resume.version, cleaned)
         return self.get(resume.version)
 
+    def add_skill(self, version: int, skill: str) -> None:
+        """Add a skill to a version's master skills list, unless it's already there."""
+        resume = self.get(version)
+        if " ".join(skill.split()).casefold() in {s.casefold() for s in resume.skills or []}:
+            return
+        if len(" ".join(skill.split())) > MAX_SKILL_LENGTH:
+            raise InvalidRequestError(f"Keep each skill under {MAX_SKILL_LENGTH} characters.")
+        if len(resume.skills or []) >= MAX_SKILLS:
+            raise InvalidRequestError(f"Keep your master skills list to {MAX_SKILLS} skills or fewer.")
+        skills = list(resume.skills or [])
+        add_skill(skills, skill)
+        with self._db.transaction() as uow:
+            uow.resumes.save_skills(version, skills)
+
     def _current(self) -> ResumeVersion:
         resume = self.current()
         if resume is None:
