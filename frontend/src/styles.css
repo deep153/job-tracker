@@ -1455,6 +1455,10 @@ select.text-input {
   background: var(--green);
 }
 
+.legend-bullets {
+  background: var(--primary);
+}
+
 .mapping-error {
   padding: 10px 16px 0;
 }
@@ -1485,6 +1489,11 @@ select.text-input {
 .paragraph.is-skills {
   border-left-color: var(--green);
   background: var(--green-soft);
+}
+
+.paragraph.is-bullets {
+  border-left-color: var(--primary);
+  background: var(--primary-soft);
 }
 
 .paragraph-body {
@@ -1563,6 +1572,12 @@ select.text-input {
 .paragraph-role.role-skills[aria-pressed="true"] {
   border-color: var(--green);
   background: var(--green);
+  color: white;
+}
+
+.paragraph-role.role-bullets[aria-pressed="true"] {
+  border-color: var(--primary);
+  background: var(--primary);
   color: white;
 }
 

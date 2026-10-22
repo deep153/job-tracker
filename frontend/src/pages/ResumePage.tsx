@@ -9,16 +9,28 @@ import { fullDate, timeAgo } from "../utils/format";
 
 const DOCX_ACCEPT = ".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
-type Role = "summary" | "skills";
+type Role = "summary" | "skills" | "bullets";
 
 type Draft = Record<number, Role>;
 
-const ROLE_LABELS: Record<Role, string> = { summary: "Summary", skills: "Skills" };
+const ROLES: Role[] = ["summary", "skills", "bullets"];
+
+const ROLE_LABELS: Record<Role, string> = { summary: "Summary", skills: "Skills", bullets: "Bullet" };
 
 function draftFrom(mapping: ResumeMapping | null): Draft {
   const draft: Draft = {};
   for (const index of mapping?.summary ?? []) draft[index] = "summary";
   for (const index of mapping?.skills ?? []) draft[index] = "skills";
+  for (const index of mapping?.bullets ?? []) draft[index] = "bullets";
+  return draft;
+}
+
+/** The saved marking, with the proposed experience bullets filled in when none are marked yet. */
+function proposedDraft(resume: Resume): Draft {
+  const draft = draftFrom(resume.mapping);
+  if (resume.mapping && resume.mapping.bullets.length === 0) {
+    for (const index of resume.proposed_bullets ?? []) draft[index] ??= "bullets";
+  }
   return draft;
 }
 
@@ -28,7 +40,7 @@ function mappingFrom(draft: Draft): ResumeMapping {
       .filter(([, r]) => r === role)
       .map(([index]) => Number(index))
       .sort((a, b) => a - b);
-  return { summary: indexes("summary"), skills: indexes("skills") };
+  return { summary: indexes("summary"), skills: indexes("skills"), bullets: indexes("bullets") };
 }
 
 function pages(count: number): string {
@@ -81,8 +93,8 @@ export function ResumePage() {
         <div className="page-heading">
           <h1>Resume</h1>
           <p className="subtitle">
-            Your master resume. When you apply, only the Summary is rewritten and your Skills reordered; everything else
-            stays exactly as it is.
+            Your master resume. When you apply, the Summary is rewritten, your Skills reordered and the text of your
+            experience bullets may be reworded (never their labels or numbers); everything else stays exactly as it is.
           </p>
         </div>
 
@@ -235,8 +247,10 @@ function ReadyNotice({ resume }: { resume: Resume }) {
         <CheckIcon />
         <span className="notice-text">
           Ready for tailoring: {resume.mapping!.summary.length} Summary and {resume.mapping!.skills.length} Skills{" "}
-          {resume.mapping!.skills.length === 1 ? "paragraph" : "paragraphs"} marked, {resume.skills!.length} skills in
-          your master list.
+          {resume.mapping!.skills.length === 1 ? "paragraph" : "paragraphs"} marked
+          {resume.mapping!.bullets.length > 0 &&
+            `, ${resume.mapping!.bullets.length} experience ${resume.mapping!.bullets.length === 1 ? "bullet" : "bullets"}`}
+          , {resume.skills!.length} skills in your master list.
         </span>
       </div>
     );
@@ -245,7 +259,7 @@ function ReadyNotice({ resume }: { resume: Resume }) {
     <div className="notice notice-info" role="status">
       <span className="notice-text">
         Check the preview, then mark which paragraphs are your <strong>Summary</strong> and which are your{" "}
-        <strong>Skills</strong> section and save.
+        <strong>Skills</strong> section and save. Your experience bullets are suggested after that.
         {resume.version > 1 && " Each new version is marked on its own."}
       </span>
     </div>
@@ -254,7 +268,7 @@ function ReadyNotice({ resume }: { resume: Resume }) {
 
 function MappingEditor({ resume, onSaved }: { resume: Resume; onSaved: (resume: Resume) => void }) {
   const saved = draftFrom(resume.mapping);
-  const [draft, setDraft] = useState(saved);
+  const [draft, setDraft] = useState(() => proposedDraft(resume));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const dirty = JSON.stringify(mappingFrom(draft)) !== JSON.stringify(mappingFrom(saved));
@@ -276,7 +290,8 @@ function MappingEditor({ resume, onSaved }: { resume: Resume; onSaved: (resume: 
     setError(null);
     try {
       const next = await saveResumeMapping(mappingFrom(draft));
-      setDraft(draftFrom(next.mapping));
+      // Suggest bullets right after the first save, when the Summary and Skills they follow are known.
+      setDraft(resume.mapping ? draftFrom(next.mapping) : proposedDraft(next));
       onSaved(next);
     } catch (e) {
       setError((e as Error).message);
@@ -290,11 +305,12 @@ function MappingEditor({ resume, onSaved }: { resume: Resume; onSaved: (resume: 
       <div className="panel-header mapping-header">
         <div className="mapping-title">
           <h2 className="panel-title" id="mapping-heading">
-            Summary and Skills
+            Summary, Skills and experience bullets
           </h2>
           <p className="mapping-counts">
             <span className="legend legend-summary" /> {counts.summary.length} Summary
             <span className="legend legend-skills" /> {counts.skills.length} Skills
+            <span className="legend legend-bullets" /> {counts.bullets.length} Bullets
           </p>
         </div>
         <span className="save-status" aria-live="polite">
@@ -371,7 +387,7 @@ function ParagraphRow({
         </div>
       </div>
       <div className="paragraph-roles" role="group" aria-label="Mark this paragraph as">
-        {(["summary", "skills"] as Role[]).map((r) => (
+        {ROLES.map((r) => (
           <button
             key={r}
             type="button"

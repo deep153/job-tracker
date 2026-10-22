@@ -4,14 +4,14 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] A resume version stores its experience-bullet paragraph indexes; older versions have none
-- [ ] The resume data includes a proposed default bullet marking
-- [ ] Saving the markings accepts bullets, and refuses overlaps with Summary or Skills and blank paragraphs
-- [ ] The mapping screen shows the third marking, prefilled with the proposal, and lets me untick paragraphs
-- [ ] A resume with no bullets marked is still ready, and tailoring works as before
-- [ ] Test fixture: a resume with list-item experience bullets that have bold labels and numbers
-- [ ] Test: the proposed default is exactly the list items after the Skills section
-- [ ] Test: saving a bullet that is also marked as Summary is refused
-- [ ] Test: a resume saved without bullets still tailors successfully
+- [x] A resume version stores its experience-bullet paragraph indexes; older versions have none
+- [x] The resume data includes a proposed default bullet marking
+- [x] Saving the markings accepts bullets, and refuses overlaps with Summary or Skills and blank paragraphs
+- [x] The mapping screen shows the third marking, prefilled with the proposal, and lets me untick paragraphs
+- [x] A resume with no bullets marked is still ready, and tailoring works as before
+- [x] Test fixture: a resume with list-item experience bullets that have bold labels and numbers
+- [x] Test: the proposed default is exactly the list items after the Skills section
+- [x] Test: saving a bullet that is also marked as Summary is refused
+- [x] Test: a resume saved without bullets still tailors successfully

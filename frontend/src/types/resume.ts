@@ -10,7 +10,7 @@ export type ResumeParagraph = {
   is_list: boolean;
 };
 
-export type ResumeMapping = { summary: number[]; skills: number[] };
+export type ResumeMapping = { summary: number[]; skills: number[]; bullets: number[] };
 
 export type ResumeVersion = {
   version: number;
@@ -25,5 +25,7 @@ export type ResumeVersion = {
 export type Resume = ResumeVersion & {
   paragraphs: ResumeParagraph[];
   mapping: ResumeMapping | null;
+  /** List items after the Summary and Skills: the default experience bullets, once those are marked. */
+  proposed_bullets: number[] | null;
   skills: string[] | null;
 };

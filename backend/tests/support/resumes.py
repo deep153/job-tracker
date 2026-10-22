@@ -141,11 +141,22 @@ def mapping_for(resume: dict[str, Any], summary: str = SUMMARY) -> dict[str, lis
     }
 
 
-def add_ready_resume(client: TestClient, summary: str = SUMMARY, bold_labels: bool = False) -> dict[str, Any]:
-    """Upload the sample resume and mark its Summary and Skills, so it can be scored against."""
-    uploaded = upload(client, sample_resume(summary, bold_labels=bold_labels))
+def add_ready_resume(
+    client: TestClient,
+    summary: str = SUMMARY,
+    bold_labels: bool = False,
+    data: bytes | None = None,
+    bullets: bool = False,
+) -> dict[str, Any]:
+    """Upload the sample resume (or `data`) and mark its Summary and Skills, so it can be scored against.
+    With `bullets`, the proposed experience bullets are marked too."""
+    uploaded = upload(client, data or sample_resume(summary, bold_labels=bold_labels))
     assert uploaded.status_code == 201, uploaded.text
-    mapped = client.put("/api/resume/mapping", json=mapping_for(uploaded.json(), summary))
+    mapping = mapping_for(uploaded.json(), summary)
+    mapped = client.put("/api/resume/mapping", json=mapping)
     assert mapped.status_code == 200, mapped.text
+    if bullets:
+        mapped = client.put("/api/resume/mapping", json={**mapping, "bullets": mapped.json()["proposed_bullets"]})
+        assert mapped.status_code == 200, mapped.text
     resume: dict[str, Any] = mapped.json()
     return resume

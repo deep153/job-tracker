@@ -40,10 +40,13 @@ def scored_job(
     form: str = "greenhouse.html",
     variants: dict[str, bool] | None = None,
     platform: str = "greenhouse",
+    resume: bytes | None = None,
+    bullets: bool = False,
 ) -> int:
-    """A ready resume and one scored job on `platform` to apply to, whose application form is the local fake page
-    `form` (with `variants`, see `fake_forms`); returns the job's id."""
-    add_ready_resume(client, bold_labels=bold_labels)
+    """A ready resume (the sample one, or `resume` with its proposed `bullets` marked if asked) and one scored job on
+    `platform` to apply to, whose application form is the local fake page `form` (with `variants`, see
+    `fake_forms`); returns the job's id."""
+    add_ready_resume(client, bold_labels=bold_labels, data=resume, bullets=bullets)
     url = form_url(form, **(variants or {}))
     job = _JOBS[platform](BOARD, "Backend Engineer", "New York, NY", "<p>Payments in Go.</p>", url=url)
     boards.serve_jobs(BOARD, [job], platform)

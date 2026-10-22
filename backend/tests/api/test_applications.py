@@ -10,7 +10,7 @@ from job_tracker.services.resume_reader import read_paragraphs
 from tests.support.applications import apply, page_count, pdf_text, scored_job
 from tests.support.fake_job_boards import FakeJobBoards
 from tests.support.fake_llm import FakeLLM
-from tests.support.resumes import SUMMARY
+from tests.support.resumes import BULLETS, SUMMARY, full_resume
 
 TAILORED = "Backend engineer who builds payments APIs in Python and Go, with Kafka event pipelines at scale."
 LONG = " ".join(["Backend engineer who ships reliable, well-tested payment systems for large card networks."] * 40)
@@ -114,6 +114,21 @@ def test_only_the_summary_and_skills_change_and_keep_their_formatting(
         ("Infrastructure: ", True),
         ("Docker; PostgreSQL", None),
     ]
+
+
+def test_a_resume_marked_without_experience_bullets_still_tailors(
+    client: TestClient, boards: FakeJobBoards, llm: FakeLLM
+) -> None:
+    job_id = scored_job(client, boards, resume=full_resume())
+    llm.tailor(tailoring())
+
+    application = apply(client, job_id)
+
+    assert application["status"] == "in_review", application
+    text = pdf_text(client.get(f"/api/applications/{application['id']}/resume.pdf").content)
+    assert TAILORED in text
+    for bullet in BULLETS:
+        assert bullet in text
 
 
 def test_a_summary_too_long_to_fit_is_shortened_and_retried(
