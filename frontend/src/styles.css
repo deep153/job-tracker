@@ -2151,6 +2151,35 @@ mark.diff-removed,
   font-weight: 600;
 }
 
+.bullet-diffs {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bullet-diff + .bullet-diff {
+  border-top: 1px solid var(--border);
+}
+
+.bullet-empty {
+  padding: 14px 16px;
+}
+
+.bullet-reverted {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 0;
+  padding: 0 16px 14px;
+  color: var(--red);
+  font-size: 13px;
+}
+
+.bullet-reverted svg {
+  flex: none;
+  margin-top: 2px;
+}
+
 .skill {
   padding: 0 6px;
   border-radius: 3px;

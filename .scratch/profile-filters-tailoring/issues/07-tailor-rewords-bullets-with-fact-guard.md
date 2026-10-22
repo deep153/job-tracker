@@ -11,17 +11,17 @@ The renderer replaces only the text after the label inside the existing runs, so
 
 **Blocked by:** 06 (Marking experience bullets on the Resume page)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The tailoring request includes the marked bullets; the answer schema accepts changed bullets by number
-- [ ] The fact check reverts bullets with changed numbers, unlisted skills or more than 15% growth, and records the reason
-- [ ] Rewritten bullets appear in the tailored .docx and PDF with the label run untouched and still bold
-- [ ] All unmarked paragraphs in the tailored .docx are identical to the master
-- [ ] Shorten-and-retry includes bullets, and the final page count equals the master's
-- [ ] The review bundle includes master, tailored and reverted bullets with reasons, and older applications without bullets display as before
-- [ ] The review screen shows a diff per changed bullet and marks reverted ones with their reason
-- [ ] The scripted fake LLM can script bullet rewrites in tailoring answers
-- [ ] Test: a scripted rewrite appears in the tailored .docx text with its label still bold, and other paragraphs are unchanged
-- [ ] Test: a rewrite changing "60%" to "70%" is reverted and its reason is in the review bundle
-- [ ] Test: a rewrite adding a skill that's in neither the original bullet nor the master list is reverted
-- [ ] Test: the tailored PDF's page count equals the master's
+- [x] The tailoring request includes the marked bullets; the answer schema accepts changed bullets by number
+- [x] The fact check reverts bullets with changed numbers, unlisted skills or more than 15% growth, and records the reason
+- [x] Rewritten bullets appear in the tailored .docx and PDF with the label run untouched and still bold
+- [x] All unmarked paragraphs in the tailored .docx are identical to the master
+- [x] Shorten-and-retry includes bullets, and the final page count equals the master's
+- [x] The review bundle includes master, tailored and reverted bullets with reasons, and older applications without bullets display as before
+- [x] The review screen shows a diff per changed bullet and marks reverted ones with their reason
+- [x] The scripted fake LLM can script bullet rewrites in tailoring answers
+- [x] Test: a scripted rewrite appears in the tailored .docx text with its label still bold, and other paragraphs are unchanged
+- [x] Test: a rewrite changing "60%" to "70%" is reverted and its reason is in the review bundle
+- [x] Test: a rewrite adding a skill that's in neither the original bullet nor the master list is reverted
+- [x] Test: the tailored PDF's page count equals the master's

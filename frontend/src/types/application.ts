@@ -34,10 +34,22 @@ export type ApplicationSummary = {
 
 export type SkillLine = { label: string | null; skills: string[] };
 
+/** One experience bullet: the master's text after its label, the text in use, and the last rewrite the fact
+ * check turned down (it changed a number, added an unlisted skill or grew too much), with why. */
+export type BulletEdit = {
+  index: number;
+  label: string | null;
+  master: string;
+  tailored: string;
+  reverted: { text: string; reason: string } | null;
+};
+
 export type TailoredResume = {
   master_version: number;
   summary: { master: string[]; tailored: string[] };
   skills: { master: SkillLine[]; tailored: SkillLine[] };
+  /** Null on resumes tailored before bullets could be reworded; empty when none are marked. */
+  bullets: BulletEdit[] | null;
   page_count: number;
   master_page_count: number;
   /** False when the tailored PDF has more pages than the master. */

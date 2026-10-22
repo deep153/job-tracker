@@ -50,8 +50,8 @@ class FakeLLM:
     Scoring prompts are answered by the job's title (the prompt's "Title: ..." line): a fit score of 80 with
     stock reasons and keywords unless `score` or `answer` scripted something else for that title, or
     `score_resume` scripted a score for the resume being scored.
-    Tailoring prompts get the answers queued with `tailor`, in order, then a stock answer that rewrites the
-    summary and leaves the skills lines as they are.
+    Tailoring prompts get the answers queued with `tailor` (which may reword bullets and list gaps), in order,
+    then a stock answer that rewrites the summary and leaves the skills lines and bullets as they are.
     Answering prompts get the drafts scripted with `draft` for their questions, and no answer for the rest.
     Cover letter prompts get DEFAULT_COVER_LETTER.
     """
@@ -138,7 +138,13 @@ class FakeLLM:
         if isinstance(answer, LLMError):
             raise answer
         if answer is None and call.is_tailoring:
-            answer = {"summary": [DEFAULT_TAILORED_SUMMARY], "skills": [], "keywords": ["Python", "Kafka"], "gaps": []}
+            answer = {
+                "summary": [DEFAULT_TAILORED_SUMMARY],
+                "skills": [],
+                "bullets": [],
+                "keywords": ["Python", "Kafka"],
+                "gaps": [],
+            }
         if answer is None:
             answer = {
                 "score": 80,

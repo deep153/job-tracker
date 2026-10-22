@@ -19,6 +19,7 @@ import {
   APPLICATION_LABELS,
   APPLIED_STATUSES,
   type Application,
+  type BulletEdit,
   type SkillLine,
   type TailoredResume,
   type TrackedStatus,
@@ -647,6 +648,7 @@ function InReview({
           </section>
           <SummaryDiff master={resume.summary.master} tailored={resume.summary.tailored} />
           <SkillsDiff master={resume.skills.master} tailored={resume.skills.tailored} />
+          {resume.bullets && resume.bullets.length > 0 && <BulletsDiff bullets={resume.bullets} />}
           <Coverage coverage={resume.coverage} fitScore={resume.fit_score} />
         </div>
         <section className="panel resume-preview-panel" aria-labelledby="preview-heading">
@@ -830,6 +832,59 @@ function SkillsDiff({ master, tailored }: { master: SkillLine[]; tailored: Skill
           </div>
         ))}
       </div>
+    </section>
+  );
+}
+
+function BulletsDiff({ bullets }: { bullets: BulletEdit[] }) {
+  const shown = bullets.filter((b) => b.tailored !== b.master || b.reverted);
+  return (
+    <section className="panel" aria-labelledby="bullets-heading">
+      <div className="panel-header">
+        <h2 className="panel-title" id="bullets-heading">
+          Experience bullets
+        </h2>
+        <span className="count count-small">
+          {bullets.filter((b) => b.tailored !== b.master).length} of {bullets.length} reworded
+        </span>
+      </div>
+      {shown.length === 0 ? (
+        <p className="panel-empty bullet-empty">Every bullet already fit this job, so none were reworded.</p>
+      ) : (
+        <ul className="bullet-diffs">
+          {shown.map((b) => {
+            const diff = diffWords(b.master, b.tailored);
+            return (
+              <li className="bullet-diff" key={b.index}>
+                <div className="diff-columns">
+                  <div className="diff-side">
+                    <h3 className="diff-side-title">Master</h3>
+                    <p>
+                      {b.label && <strong>{b.label}: </strong>}
+                      <Words segments={diff.before} kind="removed" />
+                    </p>
+                  </div>
+                  <div className="diff-side">
+                    <h3 className="diff-side-title">Tailored</h3>
+                    <p>
+                      {b.label && <strong>{b.label}: </strong>}
+                      <Words segments={diff.after} kind="added" />
+                    </p>
+                  </div>
+                </div>
+                {b.reverted && (
+                  <p className="bullet-reverted" role="note">
+                    <AlertIcon />
+                    <span>
+                      Kept the original. {b.reverted.reason} The rejected rewrite was: “{b.reverted.text}”
+                    </span>
+                  </p>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </section>
   );
 }
