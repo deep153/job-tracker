@@ -37,14 +37,25 @@ class ResumeRepository:
         return [_version(row) for row in self._conn.execute("SELECT * FROM resume_master ORDER BY id DESC")]
 
     def save_mapping(
-        self, version: int, summary: list[int], skills_paragraphs: list[int], skills: list[str], bullets: list[int]
+        self,
+        version: int,
+        summary: list[int],
+        skills_paragraphs: list[int],
+        skills: list[str],
+        bullets: list[int] | None,
     ) -> None:
         self._conn.execute(
             """
             UPDATE resume_master SET summary_paragraphs = ?, skills_paragraphs = ?, skills = ?, bullet_paragraphs = ?
             WHERE id = ?
             """,
-            (json.dumps(summary), json.dumps(skills_paragraphs), json.dumps(skills), json.dumps(bullets), version),
+            (
+                json.dumps(summary),
+                json.dumps(skills_paragraphs),
+                json.dumps(skills),
+                None if bullets is None else json.dumps(bullets),
+                version,
+            ),
         )
 
     def save_skills(self, version: int, skills: list[str]) -> None:

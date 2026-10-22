@@ -79,8 +79,11 @@ class ResumeService:
         return MasterResume(resume.version, text, resume.skills)
 
     def save_mapping(self, summary: list[int], skills: list[int], bullets: list[int] | None = None) -> ResumeVersion:
+        """Save the markings. `bullets` is None until I've chosen my experience bullets (even if none), so the
+        proposed ones keep being offered."""
         resume = self._current()
-        summary, skills, bullets = sorted(set(summary)), sorted(set(skills)), sorted(set(bullets or []))
+        summary, skills = sorted(set(summary)), sorted(set(skills))
+        bullets = None if bullets is None else sorted(set(bullets))
         if not summary:
             raise InvalidRequestError("Mark at least one paragraph as your Summary.")
         if not skills:
@@ -92,9 +95,9 @@ class ResumeService:
                 raise InvalidRequestError(f"Paragraph {index} isn't in this resume.")
             if not resume.paragraphs[index].text:
                 raise InvalidRequestError("Blank paragraphs can't be part of the Summary or Skills section.")
-        if set(bullets) & set(summary + skills):
+        if set(bullets or []) & set(summary + skills):
             raise InvalidRequestError("A paragraph can be only one of Summary, Skills or Experience bullets.")
-        for index in bullets:
+        for index in bullets or []:
             if not 0 <= index < len(resume.paragraphs):
                 raise InvalidRequestError(f"Paragraph {index} isn't in this resume.")
             if not resume.paragraphs[index].text:
@@ -129,17 +132,24 @@ class ResumeService:
 
     def add_skill(self, version: int, skill: str) -> None:
         """Add a skill to a version's master skills list, unless it's already there."""
+        if not self.check_new_skill(version, skill):
+            return
+        skills = list(self.get(version).skills or [])
+        add_skill(skills, skill)
+        with self._db.transaction() as uow:
+            uow.resumes.save_skills(version, skills)
+
+    def check_new_skill(self, version: int, skill: str) -> bool:
+        """Whether adding a skill to a version's master skills list would change it: False if it's already there.
+        Raises InvalidRequestError if it can't be added."""
         resume = self.get(version)
         if " ".join(skill.split()).casefold() in {s.casefold() for s in resume.skills or []}:
-            return
+            return False
         if len(" ".join(skill.split())) > MAX_SKILL_LENGTH:
             raise InvalidRequestError(f"Keep each skill under {MAX_SKILL_LENGTH} characters.")
         if len(resume.skills or []) >= MAX_SKILLS:
             raise InvalidRequestError(f"Keep your master skills list to {MAX_SKILLS} skills or fewer.")
-        skills = list(resume.skills or [])
-        add_skill(skills, skill)
-        with self._db.transaction() as uow:
-            uow.resumes.save_skills(version, skills)
+        return True
 
     def _current(self) -> ResumeVersion:
         resume = self.current()

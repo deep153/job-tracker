@@ -10,7 +10,8 @@ export type ResumeParagraph = {
   is_list: boolean;
 };
 
-export type ResumeMapping = { summary: number[]; skills: number[]; bullets: number[] };
+/** `bullets` is null until the experience bullets are chosen (even if none are). */
+export type ResumeMapping = { summary: number[]; skills: number[]; bullets: number[] | null };
 
 export type ResumeVersion = {
   version: number;

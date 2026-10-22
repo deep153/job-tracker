@@ -547,9 +547,13 @@ class ApplicationService:
             if not 0 <= line < len(resume.skills):
                 raise InvalidRequestError(f"Your resume has no Skills line {line + 1}.")
             version = self._resumes.get(resume.master_version)
+            self._resumes.check_new_skill(version.version, gap)
             lines = [
                 SkillLine(
-                    skills.label, [*skills.skills, gap] if n == line and gap not in skills.skills else skills.skills
+                    skills.label,
+                    [*skills.skills, gap]
+                    if n == line and gap.casefold() not in {s.casefold() for s in skills.skills}
+                    else skills.skills,
                 )
                 for n, skills in enumerate(resume.skills)
             ]
@@ -688,10 +692,11 @@ class ApplicationService:
     def _rescore(
         self, application_id: int, job: Job, version: ResumeVersion, text: str, skills: list[SkillLine]
     ) -> int | None:
-        """The Fit Scorer's score for the tailored resume, or None if the call fails. The job's own score (against
-        the master) stays as it is."""
+        """The Fit Scorer's score for the tailored resume, or None if the call fails or there's no API key any more.
+        The job's own score (against the master) stays as it is."""
         ai = self._settings.ai()
-        assert ai.anthropic_api_key is not None
+        if ai.anthropic_api_key is None:
+            return None
         tailored = MasterResume(version.version, text, [skill for line in skills for skill in line.skills])
         try:
             fit = self._scorer.score(ai.anthropic_api_key, ai.scoring_model, tailored, self._settings.search(), job)

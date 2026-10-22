@@ -203,10 +203,12 @@ def test_experience_bullets_are_saved_with_the_mapping(client: TestClient) -> No
     assert saved.json()["ready"] is True
     assert client.get("/api/resume").json()["mapping"]["bullets"] == bullets
 
-    # A mapping saved without bullets (as before they existed) is still ready.
+    # A mapping saved before bullets are chosen is still ready, and keeps offering the proposed ones.
     without = {key: value for key, value in mapping_for(resume).items() if key != "bullets"}
     unmarked = client.put("/api/resume/mapping", json=without).json()
-    assert (unmarked["mapping"]["bullets"], unmarked["ready"]) == ([], True)
+    assert (unmarked["mapping"]["bullets"], unmarked["ready"]) == (None, True)
+    # Choosing no bullets is remembered as a choice.
+    assert client.put("/api/resume/mapping", json=mapping_for(resume)).json()["mapping"]["bullets"] == []
 
 
 def test_experience_bullets_cannot_overlap_the_summary_or_skills_or_be_blank(client: TestClient) -> None:

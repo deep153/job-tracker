@@ -16,6 +16,7 @@ const KIND_LABELS: Record<string, string> = {
   rescoring: "Re-scoring tailored resumes",
   answers: "Open-ended answers",
   cover_letter: "Cover letters",
+  profile: "Profile from resume",
 };
 
 export function SettingsPage() {

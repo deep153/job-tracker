@@ -86,6 +86,20 @@ def test_a_gap_that_would_lengthen_the_resume_is_refused_and_nothing_changes(
     assert client.get("/api/resume").json()["skills"] == master_skills
 
 
+def test_a_gap_already_on_the_chosen_line_is_not_added_twice(
+    client: TestClient, boards: FakeJobBoards, llm: FakeLLM
+) -> None:
+    job_id = scored_job(client, boards)
+    llm.tailor(tailoring(["postgresql"]))
+    application = apply(client, job_id)
+    line = application["resume"]["skills"]["tailored"][1]
+
+    response = add_gap(client, application["id"], "postgresql", 1)
+
+    assert response.status_code == 200, response.text
+    assert response.json()["resume"]["skills"]["tailored"][1] == line
+
+
 def test_only_a_gap_of_this_resume_can_be_added_to_a_real_skills_line(
     client: TestClient, boards: FakeJobBoards, llm: FakeLLM
 ) -> None:

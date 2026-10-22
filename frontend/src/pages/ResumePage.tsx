@@ -26,16 +26,16 @@ function draftFrom(mapping: ResumeMapping | null): Draft {
   return draft;
 }
 
-/** The saved marking, with the proposed experience bullets filled in when none are marked yet. */
+/** The saved marking, with the proposed experience bullets filled in until bullets have been chosen. */
 function proposedDraft(resume: Resume): Draft {
   const draft = draftFrom(resume.mapping);
-  if (resume.mapping && resume.mapping.bullets.length === 0) {
+  if (resume.mapping && resume.mapping.bullets === null) {
     for (const index of resume.proposed_bullets ?? []) draft[index] ??= "bullets";
   }
   return draft;
 }
 
-function mappingFrom(draft: Draft): ResumeMapping {
+function mappingFrom(draft: Draft): ResumeMapping & { bullets: number[] } {
   const indexes = (role: Role) =>
     Object.entries(draft)
       .filter(([, r]) => r === role)
@@ -135,7 +135,7 @@ export function ResumePage() {
                   resume={resume}
                   onSaved={(next) => {
                     update(next);
-                    if (!resume.mapping) setProfileOpen(true);
+                    setProfileOpen(true);
                   }}
                 />
                 <SkillsEditor key={`skills-${resume.version}`} resume={resume} onSaved={update} />
@@ -252,15 +252,15 @@ function ResumeFile({
 
 function ReadyNotice({ resume, onProfile }: { resume: Resume; onProfile?: () => void }) {
   if (resume.ready) {
+    const bullets = resume.mapping?.bullets?.length ?? 0;
     return (
       <div className="notice notice-success" role="status">
         <CheckIcon />
         <span className="notice-text">
           Ready for tailoring: {resume.mapping!.summary.length} Summary and {resume.mapping!.skills.length} Skills{" "}
           {resume.mapping!.skills.length === 1 ? "paragraph" : "paragraphs"} marked
-          {resume.mapping!.bullets.length > 0 &&
-            `, ${resume.mapping!.bullets.length} experience ${resume.mapping!.bullets.length === 1 ? "bullet" : "bullets"}`}
-          , {resume.skills!.length} skills in your master list.
+          {bullets > 0 && `, ${bullets} experience ${bullets === 1 ? "bullet" : "bullets"}`}, {resume.skills!.length}{" "}
+          skills in your master list.
         </span>
         {onProfile && (
           <button type="button" className="button button-ghost" onClick={onProfile}>
@@ -304,7 +304,11 @@ function MappingEditor({ resume, onSaved }: { resume: Resume; onSaved: (resume: 
     setSaving(true);
     setError(null);
     try {
-      const next = await saveResumeMapping(mappingFrom(draft));
+      const mapping = mappingFrom(draft);
+      // Before the first save no bullets were offered, so none marked isn't a choice yet.
+      const next = await saveResumeMapping(
+        !resume.mapping && mapping.bullets.length === 0 ? { ...mapping, bullets: null } : mapping,
+      );
       // Suggest bullets right after the first save, when the Summary and Skills they follow are known.
       setDraft(resume.mapping ? draftFrom(next.mapping) : proposedDraft(next));
       onSaved(next);

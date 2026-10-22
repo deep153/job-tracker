@@ -83,6 +83,21 @@ def test_edits_that_make_the_resume_longer_are_flagged(client: TestClient, board
     assert (fixed["page_count"], fixed["fits"]) == (1, True)
 
 
+def test_editing_after_the_api_key_is_removed_still_regenerates_without_rescoring(
+    client: TestClient, boards: FakeJobBoards, llm: FakeLLM
+) -> None:
+    application = apply(client, scored_job(client, boards))
+    client.put("/api/settings/anthropic-api-key", json={"key": " "})
+    calls = len(llm.calls)
+
+    response = edit(client, application["id"], [EDITED], SKILLS)
+
+    assert response.status_code == 200, response.text
+    assert response.json()["resume"]["summary"]["tailored"] == [EDITED]
+    assert response.json()["resume"]["fit_score"]["after"] is None
+    assert len(llm.calls) == calls
+
+
 def test_a_saved_draft_returns_the_same_review_bundle_when_reopened(
     client: TestClient, boards: FakeJobBoards, llm: FakeLLM, tmp_path: Path
 ) -> None:

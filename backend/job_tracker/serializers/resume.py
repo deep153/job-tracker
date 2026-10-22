@@ -27,7 +27,7 @@ def resume_json(resume: ResumeVersion) -> dict[str, Any]:
         mapping = {
             "summary": resume.summary_paragraphs,
             "skills": resume.skills_paragraphs,
-            "bullets": resume.bullet_paragraphs or [],
+            "bullets": resume.bullet_paragraphs,
         }
     return {
         **resume_version_json(resume),

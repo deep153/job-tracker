@@ -21,8 +21,8 @@ def numbers(text: str) -> list[str]:
 def problem(original: str, rewrite: str, allowed_skills: list[str], keywords: list[str]) -> str | None:
     """Why `rewrite` can't replace `original` (the text after the bullet's label), or None when it can.
 
-    It can't if its numbers differ from the original's (as a multiset), if it names a skill from the master list
-    or the job's keywords that's in neither the original nor the master list, or if it's more than 15% longer.
+    It can't if its numbers differ from the original's (as a multiset), if it names one of the job's keywords that's
+    in neither the original nor the master list, or if it's more than 15% longer.
     """
     before, after = Counter(numbers(original)), Counter(numbers(rewrite))
     if before != after:
@@ -33,7 +33,7 @@ def problem(original: str, rewrite: str, allowed_skills: list[str], keywords: li
         if removed:
             return f"It drops {', '.join(dict.fromkeys(removed))}."
         return f"It adds the number {', '.join(dict.fromkeys(added))}."
-    for skill in [*allowed_skills, *keywords]:
+    for skill in keywords:
         listed = any(mentions(allowed, skill) for allowed in allowed_skills)
         if not listed and mentions(rewrite, skill) and not mentions(original, skill):
             return f"It adds “{skill}”, which isn't in this bullet or your master skills list."

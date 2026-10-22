@@ -17,8 +17,8 @@ export const getApplication = (id: number) => request<Application>(`/api/applica
 export const editTailoredResume = (id: number, edits: TailoredResumeEdits) =>
   request<Application>(`/api/applications/${id}/resume`, sendJson("PUT", edits));
 
-/** Adds one of the resume's gaps to my master skills list and to Skills line `line` (from 0), without another AI
- * call; refused if that would make the resume longer than the master. */
+/** Adds one of the resume's gaps to my master skills list and to Skills line `line` (from 0), then re-scores the
+ * resume without tailoring it again; refused if that would make the resume longer than the master. */
 export const addGap = (id: number, keyword: string, line: number) =>
   request<Application>(`/api/applications/${id}/gaps`, sendJson("POST", { keyword, line }));
 
